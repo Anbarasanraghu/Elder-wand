@@ -31,7 +31,8 @@ akeriyan_app/build/
 local.properties
 
 # ===== Large ML assets / scratch =====
-wakeword_training/real_samples/
+# NOTE: wakeword_training/real_samples/ IS tracked — the ~1 MB of real user
+# voice recordings are essential training data the Colab notebook pulls in.
 *.tmp
 
 # ===== Vendored binaries & models (large & downloadable, keep out of git) =====
