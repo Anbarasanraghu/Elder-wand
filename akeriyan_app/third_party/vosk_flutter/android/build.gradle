@@ -1,0 +1,38 @@
+group 'org.vosk.vosk_flutter'
+version '1.0'
+
+// AGP/Gradle are provided by the host app (AGP 9 / Gradle 9). The original
+// plugin pinned its own AGP 7.0.3 buildscript classpath, which conflicts with
+// modern toolchains — removed. Only the extra repositories are kept so the
+// vosk-android + JNA AARs resolve.
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url 'https://alphacephei.com/maven/'
+        }
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'org.vosk.vosk_flutter'
+    compileSdk 36
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    defaultConfig {
+        minSdkVersion 21
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
+    implementation 'com.alphacephei:vosk-android:0.3.46@aar'
+}

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(unzip -l vosk-model-small-en-us-0.15.zip)",
+      "Bash(flutter pub *)"
+    ]
+  }
+}

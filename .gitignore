@@ -1,0 +1,59 @@
+# ===== Secrets — NEVER commit =====
+.env
+*.env
+!.env.example
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# ===== Runtime data / logs =====
+logs/
+*.log
+# databases hold live app data; keep them out of git (they change constantly)
+*.db
+*.sqlite
+*.sqlite3
+
+# ===== Flutter / Dart / Android build artifacts =====
+akeriyan_app/.dart_tool/
+akeriyan_app/.flutter-plugins
+akeriyan_app/.flutter-plugins-dependencies
+akeriyan_app/build/
+**/build/
+.gradle/
+*.iml
+local.properties
+
+# ===== Large ML assets / scratch =====
+wakeword_training/real_samples/
+*.tmp
+
+# ===== Vendored binaries & models (downloadable, keep out of git) =====
+# Model weights & archives
+*.onnx
+*.ort
+*.tflite
+*.zip
+# Piper TTS runtime (binaries, dll, espeak data, voices)
+akeriyan_backend/piper/
+# Vosk / local model assets
+akeriyan_app/assets/models/
+# Native runtime libs
+*.dll
+*.so
+*.dylib
+# tflite_flutter third-party example junk (not our code)
+akeriyan_app/third_party/tflite_flutter/example/
+# Fonts are large binaries; uncomment if you'd rather track them
+# *.ttf
+
+# ===== OS =====
+Thumbs.db
+.DS_Store
+desktop.ini
