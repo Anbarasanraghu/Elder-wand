@@ -34,22 +34,20 @@ local.properties
 wakeword_training/real_samples/
 *.tmp
 
-# ===== Vendored binaries & models (downloadable, keep out of git) =====
-# Model weights & archives
-*.onnx
-*.ort
-*.tflite
+# ===== Vendored binaries & models (large & downloadable, keep out of git) =====
+# NOTE: the app's own wakeword models (assets/wakeword/*.tflite, ~3 MB total)
+# ARE tracked — they're small and essential. Only the big vendored stuff below
+# is excluded via explicit paths, so we don't need blanket *.tflite / *.onnx.
 *.zip
-# Piper TTS runtime (binaries, dll, espeak data, voices)
+# Piper TTS runtime (binaries, dll, espeak data, onnx/ort voices)
 akeriyan_backend/piper/
-# Vosk / local model assets
+# Vosk / local model assets (40 MB zip)
 akeriyan_app/assets/models/
-# Native runtime libs
-*.dll
-*.so
-*.dylib
-# tflite_flutter third-party example junk (not our code)
+# tflite_flutter third-party native libs + example junk (multi-MB, not our code)
 akeriyan_app/third_party/tflite_flutter/example/
+**/libtensorflowlite_c-*.dylib
+**/libtensorflowlite_c-*.so
+**/*.dll
 # Fonts are large binaries; uncomment if you'd rather track them
 # *.ttf
 
