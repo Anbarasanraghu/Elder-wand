@@ -54,9 +54,24 @@ async def _alerts_loop():
         await asyncio.sleep(240)  # 4 minutes
 
 
+async def _warmup():
+    """Preload the LLM + STT models so the FIRST user request is fast, not cold."""
+    try:
+        await ollama_service.warmup()
+    except Exception as e:  # noqa: BLE001
+        print(f"[AKERIYAN] LLM warmup skipped: {e}")
+    try:
+        from app.services.stt import whisper_service
+        await asyncio.to_thread(whisper_service.get_model)
+        print("[AKERIYAN] Whisper model warm.")
+    except Exception as e:  # noqa: BLE001
+        print(f"[AKERIYAN] Whisper warmup skipped: {e}")
+
+
 @app.on_event("startup")
 async def _start_background():
     asyncio.create_task(_alerts_loop())
+    asyncio.create_task(_warmup())
 
 @app.get("/v1/health")
 async def health():

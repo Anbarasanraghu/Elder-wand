@@ -23,6 +23,34 @@ from app.services.skills import (weather, news, websearch, translate, calc,
 
 _CONJ = re.compile(r'\b(and|then|also|after that)\b', re.I)
 
+# Words that signal a real action/skill (vs. plain conversation). When the fast
+# rules are unsure AND none of these appear, the request is just a question or
+# chit-chat, so we skip the heavyweight agentic planner (which loads the whole
+# intent menu as its prompt = slow) and answer directly with the lightweight
+# chat model. This is the single biggest latency win for everyday questions.
+_ACTION_HINT = re.compile(r'''\b(
+    remind|reminder|alarm|wake\s+me|timer|set\s+a|
+    call|dial|ring|phone|
+    text|sms|message|whatsapp|
+    open|launch|flashlight|torch|notification|notifications|
+    weather|temperature|forecast|
+    news|headline|headlines|briefing|brief\s+me|
+    email|inbox|gmail|mail|
+    lead|pipeline|client|deal|crm|
+    remember|forget|note\s+that|
+    translate|
+    search|google|look\s+up|
+    price|chart|market|stock|stocks|crypto|bitcoin|ethereum|
+    buy|sell|trade|trading|analysis|analyse|analyze|scalp|watch|monitor|
+    gold|silver|forex|ticker|
+    routine|good\s+morning|good\s+night|leaving\s+home
+)\b''', re.I | re.X)
+
+
+def _looks_actionable(text: str) -> bool:
+    """True if the text plausibly asks for an action/skill (needs the planner)."""
+    return bool(_ACTION_HINT.search(text))
+
 
 async def understand(text: str,
                      lat: float | None = None,
@@ -55,6 +83,10 @@ async def _process(text: str,
     steps: list[dict]
     if single_ok:
         steps = [rule]                                   # fast single path
+    elif not multi_hint and not _looks_actionable(text):
+        # Plain question / chit-chat — skip the agentic planner entirely and
+        # answer directly with the lightweight chat model (small prompt = fast).
+        steps = [{"intent": "chat", "confidence": 0.7, "slots": {}, "speak": ""}]
     else:
         plan = await planner.plan(text)                  # agentic / LLM path
         if plan:

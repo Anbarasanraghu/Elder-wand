@@ -44,7 +44,7 @@ async def plan(text: str) -> list[dict] | None:
     messages += history.as_messages()
     messages.append({"role": "user", "content": text})
 
-    data = await ollama_service.chat_json(messages)
+    data = await ollama_service.chat_json(messages, max_tokens=256)
     steps = data.get("steps")
     if not isinstance(steps, list) or not steps:
         return None

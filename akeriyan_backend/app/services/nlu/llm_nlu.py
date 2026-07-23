@@ -69,7 +69,7 @@ async def parse_with_llm(text: str) -> dict | None:
     messages += history.as_messages()          # conversation context
     messages.append({"role": "user", "content": text})
 
-    data = await ollama_service.chat_json(messages)
+    data = await ollama_service.chat_json(messages, max_tokens=200)
     intent = data.get("intent")
     if not intent:
         return None
@@ -90,12 +90,14 @@ async def free_chat(text: str) -> str:
     messages = [
         {"role": "system",
          "content": f"You are Elder Wand, {settings.owner_name}'s friendly voice "
-                    f"assistant. Answer in 1-3 short spoken sentences."
+                    f"assistant. Reply in ONE or TWO short spoken sentences — "
+                    f"concise and natural. No lists, no markdown."
                     + store.facts_context()},
     ]
     messages += history.as_messages()
     messages.append({"role": "user", "content": text})
     try:
-        return await ollama_service.chat(messages, temperature=0.6)
+        # Cap generation: spoken answers are short, and every token is CPU time.
+        return await ollama_service.chat(messages, temperature=0.6, max_tokens=120)
     except Exception:
         return "Sorry, I couldn't think of an answer just now."

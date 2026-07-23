@@ -39,7 +39,10 @@ async def chat(messages: list[dict], *, json_mode: bool = False,
     `max_tokens` caps generation (num_predict) — key for CPU response time.
     Raises if the model can't be reached — callers decide the fallback.
     """
-    options = {"temperature": temperature}
+    # num_ctx bounds prompt-processing cost. llama3.2 advertises a 128k window;
+    # without a cap Ollama can allocate/process far more than we need and slow
+    # down prompt eval. 4096 comfortably fits our system prompt + short history.
+    options = {"temperature": temperature, "num_ctx": 4096}
     if max_tokens:
         options["num_predict"] = max_tokens
     payload = {
@@ -56,6 +59,16 @@ async def chat(messages: list[dict], *, json_mode: bool = False,
     r.raise_for_status()
     data = r.json()
     return (data.get("message", {}).get("content") or "").strip()
+
+
+async def warmup() -> None:
+    """Preload the model into RAM so the first real request isn't a cold start.
+    Fire-and-forget from app startup; failures are harmless."""
+    try:
+        if await is_available():
+            await chat([{"role": "user", "content": "hi"}], max_tokens=1)
+    except Exception:
+        pass
 
 
 async def chat_json(messages: list[dict], max_tokens: int | None = None) -> dict:
