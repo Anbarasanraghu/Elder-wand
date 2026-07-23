@@ -9,6 +9,7 @@ import 'notification_service.dart';
 import 'app_launcher.dart';
 import 'apps_list_screen.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'openwakeword_service.dart';
 import 'location_service.dart';
 import 'vision_screen.dart';
@@ -260,45 +261,70 @@ class _AssistantScreenState extends State<AssistantScreen> {
       }
       setState(() => _heard = '"$text"');
 
-      // 2. Text -> understanding
-      final nlu = await _dio.post(
-        '${widget.backendUrl}/v1/nlu/parse',
-        data: await _nluBody(text, lang: lang),
-        options: Options(
-          headers: {'Authorization': 'Bearer ${widget.token}'},
-        ),
-      );
-      String speak = (nlu.data['speak'] as String?) ?? '';
-      final intent = nlu.data['intent'] as String?;
-      final slots = (nlu.data['slots'] as Map?) ?? {};
-
-      // 3. ACT on the command(s).
-      // Agentic multi-step: the backend may return several ordered actions.
-      final actions = nlu.data['actions'] as List?;
-      if (intent == 'multi' && actions != null && actions.isNotEmpty) {
-        for (final a in actions) {
-          final m = a as Map;
-          await _handleIntent(
-            m['intent'] as String?,
-            (m['slots'] as Map?) ?? {},
-            (m['speak'] as String?) ?? '',
-          );
+      // 2. Text -> understanding. Try the STREAMING endpoint first: plain chat
+      // is spoken sentence-by-sentence as it generates (fast, "Google-like").
+      // Actions come back as one result we handle exactly as before. Any
+      // streaming failure falls back to the classic /nlu/parse one-shot.
+      Map<String, dynamic>? nluData;
+      bool chatStreamed = false;
+      String streamedSpeak = '';
+      try {
+        final r = await _converseStream(text, lang);
+        if (r['mode'] == 'chat') {
+          chatStreamed = true;
+          streamedSpeak = (r['speak'] as String?) ?? '';
+        } else {
+          nluData = (r['data'] as Map).cast<String, dynamic>();
         }
-        // `speak` already holds the combined line from the backend.
-      } else {
-        speak = await _handleIntent(intent, slots, speak);
+      } catch (_) {
+        final nlu = await _dio.post(
+          '${widget.backendUrl}/v1/nlu/parse',
+          data: await _nluBody(text, lang: lang),
+          options: Options(
+            headers: {'Authorization': 'Bearer ${widget.token}'},
+          ),
+        );
+        nluData = (nlu.data as Map).cast<String, dynamic>();
       }
 
-      // 4. Speak the reply + log to history
-      setState(() => _response = speak);
-      HistoryStore.add(
-        youSaid: text,
-        akeriyanSaid: speak,
-        intent: intent ?? 'unknown',
-      );
-      spoke = true;
-      await TtsService.speak(speak,
-          lang: (nlu.data['speak_lang'] as String?) ?? 'en');
+      if (chatStreamed) {
+        // Audio already streamed + played by TtsService's queue.
+        setState(() => _response = streamedSpeak);
+        HistoryStore.add(
+            youSaid: text, akeriyanSaid: streamedSpeak, intent: 'chat');
+        spoke = true;
+      } else {
+        String speak = (nluData!['speak'] as String?) ?? '';
+        final intent = nluData['intent'] as String?;
+        final slots = (nluData['slots'] as Map?) ?? {};
+
+        // 3. ACT on the command(s). Multi-step returns several ordered actions.
+        final actions = nluData['actions'] as List?;
+        if (intent == 'multi' && actions != null && actions.isNotEmpty) {
+          for (final a in actions) {
+            final m = a as Map;
+            await _handleIntent(
+              m['intent'] as String?,
+              (m['slots'] as Map?) ?? {},
+              (m['speak'] as String?) ?? '',
+            );
+          }
+          // `speak` already holds the combined line from the backend.
+        } else {
+          speak = await _handleIntent(intent, slots, speak);
+        }
+
+        // 4. Speak the reply + log to history
+        setState(() => _response = speak);
+        HistoryStore.add(
+          youSaid: text,
+          akeriyanSaid: speak,
+          intent: intent ?? 'unknown',
+        );
+        spoke = true;
+        await TtsService.speak(speak,
+            lang: (nluData['speak_lang'] as String?) ?? 'en');
+      }
     } catch (e) {
       setState(() => _heard = 'Error: $e');
     } finally {
@@ -312,6 +338,70 @@ class _AssistantScreenState extends State<AssistantScreen> {
         await _resumeWake();
       }
     }
+  }
+
+  /// Calls the streaming turn endpoint. For plain chat it plays the reply
+  /// sentence-by-sentence as WAV chunks arrive (returns {'mode':'chat',...}
+  /// once playback finishes). For actions it returns {'mode':'result','data':...}
+  /// — the same shape as /nlu/parse — for the caller to handle. Throws on any
+  /// transport error so the caller can fall back to the classic path.
+  Future<Map<String, dynamic>> _converseStream(String text, String lang) async {
+    final resp = await _dio.post(
+      '${widget.backendUrl}/v1/converse/stream',
+      data: await _nluBody(text, lang: lang),
+      options: Options(
+        headers: {'Authorization': 'Bearer ${widget.token}'},
+        responseType: ResponseType.stream,
+        receiveTimeout: const Duration(minutes: 5),
+      ),
+    );
+
+    final byteStream = (resp.data as ResponseBody).stream;
+    final List<int> buf = <int>[];
+    bool isChat = false;
+    String fullSpeak = '';
+    Map<String, dynamic>? result;
+
+    TtsService.beginStream();
+    try {
+      await for (final chunk in byteStream) {
+        buf.addAll(chunk);
+        int nl;
+        // Decode only COMPLETE lines (avoids splitting multi-byte UTF-8).
+        while ((nl = buf.indexOf(10)) >= 0) {
+          final line = utf8.decode(buf.sublist(0, nl), allowMalformed: true).trim();
+          buf.removeRange(0, nl + 1);
+          if (line.isEmpty) continue;
+          final ev = jsonDecode(line) as Map<String, dynamic>;
+          switch (ev['type']) {
+            case 'meta':
+              isChat = true;
+              break;
+            case 'text':
+              fullSpeak = ('$fullSpeak ${ev['delta'] ?? ''}').trim();
+              if (mounted) setState(() => _response = fullSpeak);
+              break;
+            case 'audio':
+              TtsService.enqueueWav(base64Decode(ev['b64'] as String));
+              break;
+            case 'result':
+              result = Map<String, dynamic>.from(ev);
+              break;
+            case 'done':
+              if (ev['speak'] != null) fullSpeak = ev['speak'] as String;
+              break;
+            case 'error':
+              throw Exception(ev['speak'] ?? 'stream error');
+          }
+        }
+      }
+    } finally {
+      if (isChat) await TtsService.endStream();
+    }
+
+    if (isChat) return {'mode': 'chat', 'speak': fullSpeak};
+    if (result != null) return {'mode': 'result', 'data': result};
+    throw Exception('empty stream response');
   }
 
   /// Runs the phone-side action for an intent and returns the final spoken line.

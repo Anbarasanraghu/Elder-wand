@@ -83,7 +83,46 @@ class TtsService {
         onTimeout: () => sub.cancel());
   }
 
+  // ---- Phase 2: streaming playback queue ----
+  // The backend's /v1/converse/stream emits WAV chunks (one per sentence) as the
+  // LLM generates. We play them back-to-back so the reply starts within ~1-2s
+  // instead of waiting for the whole answer + full synthesis.
+  static final List<Uint8List> _queue = <Uint8List>[];
+  static bool _pumping = false;
+
+  /// Begin a fresh streamed reply (clears any leftover chunks).
+  static void beginStream() {
+    _queue.clear();
+  }
+
+  /// Add a WAV chunk; playback starts immediately if idle, else it queues.
+  static void enqueueWav(Uint8List bytes) {
+    if (bytes.isEmpty) return;
+    _queue.add(bytes);
+    _pump();
+  }
+
+  static Future<void> _pump() async {
+    if (_pumping) return;
+    _pumping = true;
+    try {
+      while (_queue.isNotEmpty) {
+        await _playBytes(_queue.removeAt(0));
+      }
+    } finally {
+      _pumping = false;
+    }
+  }
+
+  /// Wait until every queued chunk has finished playing.
+  static Future<void> endStream() async {
+    while (_queue.isNotEmpty || _pumping) {
+      await Future.delayed(const Duration(milliseconds: 40));
+    }
+  }
+
   static Future<void> stop() async {
+    _queue.clear();
     await _player.stop();
     await _device.stop();
   }
