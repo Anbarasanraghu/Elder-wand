@@ -56,13 +56,8 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
         : 'No model yet. Add your HuggingFace token and tap Download.');
   }
 
-  // ---- formatters ----
-  String _mb(int b) => '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
-  String _spd(double bps) =>
-      bps <= 0 ? '—' : '${(bps / (1024 * 1024)).toStringAsFixed(2)} MB/s';
-  String _eta(double s) {
-    if (s <= 0 || s.isInfinite || s.isNaN) return '—';
-    final m = s ~/ 60, sec = (s % 60).round();
+  String _elapsed(int s) {
+    final m = s ~/ 60, sec = s % 60;
     return m > 0 ? '${m}m ${sec}s' : '${sec}s';
   }
 
@@ -130,16 +125,6 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
     super.dispose();
   }
 
-  Widget _stat(String label, String value) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          Text(value,
-              style:
-                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-        ],
-      );
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,30 +173,18 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
                   ValueListenableBuilder<GemmaDownload>(
                     valueListenable: GemmaService.download,
                     builder: (_, d, _) {
-                      if (!d.running && d.received == 0) {
+                      if (!d.running && d.percent == 0) {
                         return const SizedBox.shrink();
                       }
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           LinearProgressIndicator(value: d.fraction),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Text(
-                            d.fraction != null
-                                ? '${(d.fraction! * 100).toStringAsFixed(1)}%'
-                                : 'starting...',
+                            '${d.percent}%   •   ${_elapsed(d.elapsedSec)} elapsed',
                             textAlign: TextAlign.center,
                             style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _stat('Downloaded',
-                                  '${_mb(d.received)}${d.total > 0 ? ' / ${_mb(d.total)}' : ''}'),
-                              _stat('Speed', _spd(d.speed)),
-                              _stat('ETA', _eta(d.eta)),
-                            ],
                           ),
                           const SizedBox(height: 12),
                         ],
@@ -230,13 +203,6 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
                             label: Text(d.running ? 'Downloading...' : 'Download'),
                           ),
                         ),
-                        if (d.running) ...[
-                          const SizedBox(width: 8),
-                          OutlinedButton(
-                            onPressed: GemmaService.cancelDownload,
-                            child: const Text('Cancel'),
-                          ),
-                        ],
                       ],
                     ),
                   ),

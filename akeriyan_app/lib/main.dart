@@ -7,11 +7,16 @@ import 'history_store.dart';
 import 'theme.dart';
 import 'widgets/assistant_orb.dart';
 import 'widgets/gradient_border.dart';
+import 'gemma_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AkeriyanForegroundService.init();
   await HistoryStore.init(); // load saved transcript (offline + survives restart)
+  // Register the on-device LLM engine (LiteRT-LM) for the Gemma brain.
+  try {
+    await GemmaService.initEngine();
+  } catch (_) {}
   runApp(const AkeriyanApp());
 }
 
