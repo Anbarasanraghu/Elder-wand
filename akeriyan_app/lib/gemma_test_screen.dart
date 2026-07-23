@@ -240,6 +240,22 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
                       ],
                     ),
                   ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              await GemmaService.deleteModelFile();
+                              setState(() {
+                                _ready = false;
+                                _status = 'Deleted. Download a fresh copy.';
+                              });
+                            },
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Start over (delete)'),
+                    ),
+                  ),
                 ],
               ),
             ),

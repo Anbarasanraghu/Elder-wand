@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma/core/chat.dart';
 import 'package:flutter_gemma/core/model.dart';
@@ -41,10 +42,23 @@ class GemmaService {
 
   static Future<bool> isInstalled() => _gemma.modelManager.isModelInstalled;
 
-  /// Where the model file lives once downloaded.
-  static Future<String> modelFilePath() async {
+  static const _kReadyPath = 'gemma_ready_model_path';
+
+  /// Per-URL file path — each model keeps its OWN file so a half-finished
+  /// download of one model can never corrupt another (the bug that produced
+  /// "Unable to read the file in zip archive" when switching 1B <-> E2B).
+  static Future<String> pathForUrl(String url) async {
     final dir = await getApplicationDocumentsDirectory();
-    return '${dir.path}/gemma_model.task';
+    final segs = Uri.parse(url).pathSegments;
+    final name = segs.isNotEmpty ? segs.last : 'model.task';
+    final safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    return '${dir.path}/$safe';
+  }
+
+  /// Path of a fully-downloaded, ready-to-load model (or null).
+  static Future<String?> readyModelPath() async {
+    final p = (await SharedPreferences.getInstance()).getString(_kReadyPath);
+    return (p != null && await File(p).exists()) ? p : null;
   }
 
   static bool _cancelled = false;
@@ -63,7 +77,7 @@ class GemmaService {
   static Future<void> startDownload(String url, {String? hfToken}) async {
     if (isDownloading) return;
     _cancelled = false;
-    final savePath = await modelFilePath();
+    final savePath = await pathForUrl(url);
     final file = File(savePath);
     final dio = Dio();
     final sw = Stopwatch()..start();
@@ -151,6 +165,18 @@ class GemmaService {
           throw const _IncompleteException();
         } on _CancelledException {
           rethrow;
+        } on DioException catch (e) {
+          // 416 = Range Not Satisfiable: the file is already fully downloaded.
+          if (e.response?.statusCode == 416 && start > 0) break;
+          if (_cancelled) rethrow;
+          attempt++;
+          if (attempt > maxRetries) rethrow;
+          download.value = GemmaDownload(
+            received: download.value.received,
+            total: download.value.total,
+            running: true,
+          );
+          await Future<void>.delayed(Duration(seconds: 2 + attempt));
         } catch (e) {
           if (_cancelled) rethrow;
           attempt++;
@@ -167,6 +193,7 @@ class GemmaService {
         }
       }
       await _gemma.modelManager.setModelPath(savePath);
+      (await SharedPreferences.getInstance()).setString(_kReadyPath, savePath);
       download.value = GemmaDownload(
           received: download.value.received,
           total: download.value.total,
@@ -186,15 +213,25 @@ class GemmaService {
     _cancelled = true;
   }
 
-  /// Delete any partially/fully downloaded model file (start fresh).
+  /// Delete ALL downloaded/partial model files (start completely fresh).
   static Future<void> deleteModelFile() async {
-    final f = File(await modelFilePath());
-    if (await f.exists()) await f.delete();
+    await close();
+    final dir = await getApplicationDocumentsDirectory();
+    for (final f in dir.listSync()) {
+      if (f is File &&
+          (f.path.endsWith('.task') || f.path.endsWith('gemma_model.task'))) {
+        try {
+          await f.delete();
+        } catch (_) {}
+      }
+    }
+    (await SharedPreferences.getInstance()).remove(_kReadyPath);
+    download.value = const GemmaDownload();
   }
 
-  /// True if the model file has already been downloaded to app storage.
+  /// True if a fully-downloaded model is ready to load.
   static Future<bool> modelFileExists() async =>
-      File(await modelFilePath()).exists();
+      (await readyModelPath()) != null;
 
   /// Register an already-on-device .task file (the reliable path for gated
   /// models). No copy/download — the plugin reads it in place.
@@ -205,13 +242,12 @@ class GemmaService {
   /// installed (via download or loadFromPath). GPU-accelerated when available.
   static Future<void> load({int maxTokens = 1024}) async {
     await close();
-    // Make sure the on-disk model is registered (e.g. after an app restart).
-    if (!await _gemma.modelManager.isModelInstalled) {
-      final p = await modelFilePath();
-      if (await File(p).exists()) {
-        await _gemma.modelManager.setModelPath(p);
-      }
+    // Register the fully-downloaded model file (survives app restarts).
+    final ready = await readyModelPath();
+    if (ready == null) {
+      throw StateError('No fully-downloaded model — download one first.');
     }
+    await _gemma.modelManager.setModelPath(ready);
     _model = await _gemma.createModel(
       modelType: ModelType.gemmaIt,
       maxTokens: maxTokens,
