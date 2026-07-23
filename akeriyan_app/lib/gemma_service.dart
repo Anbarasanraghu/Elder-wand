@@ -32,7 +32,7 @@ class GemmaService {
   /// model (your 12 GB phone can handle it).
   static const String defaultModelUrl =
       'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/'
-      'Gemma3-1B-IT_multi-prefill-seq_q4_ekv4096.task';
+      'gemma3-1b-it-int4.task';
 
   static bool get isLoaded => _model != null && _chat != null;
 
