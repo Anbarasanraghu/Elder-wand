@@ -29,14 +29,15 @@ class GemmaService {
   static InferenceModel? _model;
   static InferenceChat? _chat;
 
-  /// Upgraded default: Gemma 3 Nano E2B (int4), ~3.1 GB — much smarter than the
-  /// 1B and multimodal (can also see images). Your 12 GB phone handles it well.
-  /// Gated: accept the license at huggingface.co/google/gemma-3n-E2B-it-litert-preview
-  /// then use your HF token. (The tiny Gemma3-1B-IT/gemma3-1b-it-int4.task is a
-  /// lighter fallback if you want a faster/smaller model.)
+  /// Default: Gemma 3 1B (int4), ~550 MB — the model that works with the
+  /// CURRENT flutter_gemma (0.9.0). NOTE: gemma-3n "Nano" E2B/E4B are a newer
+  /// 2025 preview LiteRT format that 0.9.0 CANNOT read ("Unable to read the file
+  /// in zip archive") — those need a flutter_gemma 1.x upgrade first.
+  /// Gated: accept the license at huggingface.co/litert-community/Gemma3-1B-IT
+  /// and use your HF token.
   static const String defaultModelUrl =
-      'https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/'
-      'gemma-3n-E2B-it-int4.task';
+      'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/'
+      'gemma3-1b-it-int4.task';
 
   static bool get isLoaded => _model != null && _chat != null;
 
@@ -191,6 +192,15 @@ class GemmaService {
           );
           await Future<void>.delayed(Duration(seconds: 2 + attempt));
         }
+      }
+      // Sanity check: a .task is a ZIP, so it must start with 'PK'. If not, we
+      // downloaded an error page / HTML, not the model — fail clearly.
+      final head = await file.openRead(0, 2).first;
+      if (head.length < 2 || head[0] != 0x50 || head[1] != 0x4B) {
+        await file.delete().catchError((_) => file);
+        throw 'Downloaded file is not a valid model (not a zip — likely an '
+            'auth/error page). Check your HuggingFace token and that you '
+            'accepted the license.';
       }
       await _gemma.modelManager.setModelPath(savePath);
       (await SharedPreferences.getInstance()).setString(_kReadyPath, savePath);
