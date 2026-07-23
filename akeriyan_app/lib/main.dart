@@ -132,9 +132,14 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: Ak.bgGradient),
-        child: SafeArea(
+      body: Stack(
+        children: [
+          const DecoratedBox(
+            decoration: BoxDecoration(gradient: Ak.bgGradient),
+            child: SizedBox.expand(),
+          ),
+          Positioned.fill(child: Ak.ambientGlow()),
+          SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
             child: Column(
@@ -176,7 +181,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               ],
             ),
           ),
-        ),
+          ),
+        ],
       ),
     );
   }

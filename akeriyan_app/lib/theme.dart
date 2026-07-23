@@ -15,29 +15,30 @@ class Ak {
   // ---- Dot-matrix display font (registered in pubspec as "NDot") ----
   static const String dot = 'NDot';
 
-  // ---- Signature colours ----
-  static const purple = Color(0xFFB57BFF);     // neon light-purple accent
-  static const purpleSoft = Color(0xFFCDA9FF); // lighter purple
-  static const purpleDeep = Color(0xFF7A4FD6); // darker purple (gradient end)
-  static const silver = Color(0xFFC7CBD1);     // metallic silver (secondary)
+  // ---- Signature colours (warm amber "bento" theme) ----
+  static const purple = Color(0xFFF2A64C);     // primary WARM AMBER accent
+  static const purpleSoft = Color(0xFFFFCB8A); // light amber
+  static const purpleDeep = Color(0xFFB56420); // deep amber / burnt orange
+  static const silver = Color(0xFFCBC6BD);     // warm silver (secondary)
+  static const glowOrange = Color(0xFFFF8A3D); // ambient corner glow
 
-  // ---- Core palette ----
-  static const bg0 = Color(0xFF000000); // pure black
-  static const bg1 = Color(0xFF0A0A0F); // near-black with a faint cool tint
-  static const bg2 = Color(0xFF14141C);
+  // ---- Core palette (warm near-black canvas) ----
+  static const bg0 = Color(0xFF070605); // warm pure black
+  static const bg1 = Color(0xFF0E0C0A); // near-black, faint warm tint
+  static const bg2 = Color(0xFF17130F); // warm charcoal (bento tile base)
 
-  // Legacy accent names remapped to the new scheme (keeps screens working):
-  static const gold = purple;            // primary accent  -> neon purple
-  static const amber = purpleSoft;       // lighter purple
-  static const orange = purpleDeep;      // darker purple (gradient / glow)
-  static const cyan = silver;            // secondary accent -> silver
-  static const violet = Color(0xFF9E7BFF); // purple variant
-  static const pink = Color(0xFFC77DFF); // alerts -> bright purple (no red)
-  static const green = purple;           // live / active / connected -> purple
+  // Legacy accent names remapped to the amber scheme (keeps screens working):
+  static const gold = purple;            // primary accent  -> amber
+  static const amber = purpleSoft;       // light amber
+  static const orange = purpleDeep;      // deep amber (gradient / glow)
+  static const cyan = silver;            // secondary accent -> warm silver
+  static const violet = Color(0xFFE59A57); // amber variant
+  static const pink = Color(0xFFFFB27A); // alerts -> soft amber (no red)
+  static const green = Color(0xFF7BE0A3); // live / connected -> soft mint
 
-  static const textHi = Color(0xFFF1F2F6); // bright silver-white
-  static const textMid = Color(0xFFA6ADB8); // silver
-  static const textLo = Color(0xFF666C76);  // dim silver
+  static const textHi = Color(0xFFF4EFE8); // warm white
+  static const textMid = Color(0xFFA8A197); // warm silver
+  static const textLo = Color(0xFF6A655D);  // dim warm grey
 
   // ---- Market data semantics (trading / scalp / pro screens ONLY) ----
   // Conventional green-up / red-down colours for candles, trend lines, bias,
@@ -46,40 +47,94 @@ class Ak {
   static const up = Color(0xFF2ED47A);   // green  — bullish / up / support / target
   static const down = Color(0xFFF0454B); // red    — bearish / down / resistance / stop
 
-  // Translucent helpers (hairline borders / flat fills on black)
-  static const glassFill = Color(0x0DFFFFFF);       // ~5% white
-  static const glassLine = Color(0x1FFFFFFF);       // ~12% white
-  static const glassFillStrong = Color(0x14FFFFFF); // ~8% white
+  // Translucent helpers (frosted bento fills / hairline borders on warm black)
+  static const glassFill = Color(0x0FFFFFFF);       // ~6% white
+  static const glassLine = Color(0x1AFFFFFF);       // ~10% white
+  static const glassFillStrong = Color(0x1AFFFFFF); // ~10% white
 
-  // ---- Gradients (kept subtle/flat, minimalist) ----
+  // ---- Gradients ----
   static const bgGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [bg0, bg1, bg0],
+    colors: [bg1, bg0],
   );
 
   static const goldGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [purple, purpleDeep], // neon purple for the primary button / orb
+    colors: [purpleSoft, purpleDeep], // warm amber for the primary button / orb
   );
 
   static const cyanGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF2C2E36), Color(0xFF16181E)], // dark silver (secondary)
+    colors: [Color(0xFF2A241D), Color(0xFF161310)], // warm charcoal (secondary)
   );
 
-  // ---- Flat surface with a hairline border (no glassmorphism) ----
-  static BoxDecoration glass({double radius = 14, Color? tint}) =>
+  // Subtle top-lit gradient used to make bento tiles look glassy/frosted.
+  static const _bentoFill = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0x14FFFFFF), Color(0x08FFFFFF)],
+  );
+
+  // ---- Bento tile: rounded, frosted, hairline border. `glow` adds an amber
+  // aura for the "active/featured" tiles. Token name `glass` kept for
+  // backwards compatibility with existing screens. ----
+  static BoxDecoration glass({double radius = 22, Color? tint, bool glow = false}) =>
       BoxDecoration(
-        color: tint ?? glassFill,
+        gradient: tint == null ? _bentoFill : null,
+        color: tint,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: glassLine),
+        border: Border.all(color: glow ? const Color(0x40F2A64C) : glassLine),
+        boxShadow: glow
+            ? [
+                const BoxShadow(
+                    color: Color(0x33F2A64C), blurRadius: 34, spreadRadius: -6),
+              ]
+            : const [
+                BoxShadow(
+                    color: Color(0x40000000), blurRadius: 18, offset: Offset(0, 8)),
+              ],
       );
+
+  /// Alias with a clearer name for the bento redesign.
+  static BoxDecoration bento({double radius = 22, bool glow = false}) =>
+      glass(radius: radius, glow: glow);
+
+  static List<BoxShadow> glowShadow(Color c, {double blur = 40, double spread = 0}) =>
+      [BoxShadow(color: c, blurRadius: blur, spreadRadius: spread)];
 
   static List<BoxShadow> glow(Color c, {double blur = 40, double spread = 0}) =>
       [BoxShadow(color: c, blurRadius: blur, spreadRadius: spread)];
+
+  /// Ambient warm corner-glow layer to sit behind a screen's content (put in a
+  /// Stack under everything). Mirrors the sample's amber "sunrise" glow.
+  static Widget ambientGlow() => IgnorePointer(
+        child: Stack(
+          children: [
+            Positioned(
+              top: -120,
+              right: -80,
+              child: _glowBlob(const Color(0x33FF8A3D), 320),
+            ),
+            Positioned(
+              bottom: -140,
+              left: -100,
+              child: _glowBlob(const Color(0x22B56420), 340),
+            ),
+          ],
+        ),
+      );
+
+  static Widget _glowBlob(Color color, double size) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
+        ),
+      );
 
   // ---- Dot-matrix display text helper ----
   static TextStyle display({
