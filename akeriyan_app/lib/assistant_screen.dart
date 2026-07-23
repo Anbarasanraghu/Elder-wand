@@ -68,16 +68,34 @@ class _AssistantScreenState extends State<AssistantScreen> {
   bool _recording = false;
   bool _thinking = false;
   bool _lastOnDevice = false; // was the last reply produced fully on the phone?
+  bool _gemmaLoading = false; // on-device model warming up
   String _heard = 'Say "Hey Elder Wand" or tap the orb';
 
   @override
   void initState() {
     super.initState();
     _initTts();
+    _autoLoadGemma(); // load the on-device brain so chat runs on the phone
     _startWakeWord();
     AkeriyanForegroundService.start();
     NotificationReader.start();
     AlertsPoller.start(widget.backendUrl, widget.token);
+  }
+
+  /// If an on-device model has been downloaded, load it into memory at startup
+  /// so conversation is answered on the phone (not the backend). Runs in the
+  /// background; harmless if no model is installed yet.
+  Future<void> _autoLoadGemma() async {
+    try {
+      if (GemmaService.isLoaded) return;
+      if (!await GemmaService.modelFileExists()) return;
+      if (mounted) setState(() => _gemmaLoading = true);
+      await GemmaService.load();
+    } catch (_) {
+      // stays on the backend brain if load fails
+    } finally {
+      if (mounted) setState(() => _gemmaLoading = false);
+    }
   }
 
   Future<void> _initTts() async {
@@ -169,6 +187,51 @@ class _AssistantScreenState extends State<AssistantScreen> {
     TtsService.stop();
     AlertsPoller.stop();
     super.dispose();
+  }
+
+  /// Top status chip: is the on-device brain ready? Tap to open the loader.
+  Widget _brainStatusChip() {
+    late final String label;
+    late final Color color;
+    late final IconData icon;
+    if (_gemmaLoading) {
+      label = 'Loading on-device brain…';
+      color = Colors.amberAccent;
+      icon = Icons.hourglass_top;
+    } else if (GemmaService.isLoaded) {
+      label = 'On-device brain ready';
+      color = Colors.tealAccent;
+      icon = Icons.smartphone;
+    } else {
+      label = 'On-device brain off — tap to set up';
+      color = Colors.grey;
+      icon = Icons.cloud_outlined;
+    }
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const GemmaTestScreen()));
+        if (mounted) await _autoLoadGemma(); // pick up a freshly loaded model
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 5),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12, color: color, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Small chip showing which brain produced the current reply:
@@ -924,7 +987,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 onTap: _thinking ? null : _toggleMic,
                 child: AssistantOrb(state: state, size: 250),
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 20),
+              Center(child: _brainStatusChip()),
+              const SizedBox(height: 12),
               // Heard / response text
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 28),
