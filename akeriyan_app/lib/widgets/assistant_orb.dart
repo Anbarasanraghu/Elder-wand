@@ -1,11 +1,11 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../theme.dart';
 
 enum OrbState { idle, listening, recording, thinking, speaking }
 
-/// The glowing, breathing AI orb at the heart of AKERIYAN.
-/// Flows a Google/Gemini-style multi-colour gradient — pure Flutter.
+/// The Elder Wand core: a sphere made of orbiting particles (points evenly
+/// spread on a sphere, rotated in 3D and projected to 2D). Monochrome cool
+/// "wand-light" — the only light on screen. Reacts to state.
 class AssistantOrb extends StatefulWidget {
   final OrbState state;
   final double size;
@@ -17,53 +17,53 @@ class AssistantOrb extends StatefulWidget {
 
 class _AssistantOrbState extends State<AssistantOrb>
     with TickerProviderStateMixin {
+  late final AnimationController _spin =
+      AnimationController(vsync: this, duration: const Duration(seconds: 16))
+        ..repeat();
   late final AnimationController _pulse =
       AnimationController(vsync: this, duration: const Duration(seconds: 3))
         ..repeat();
-  late final AnimationController _spin =
-      AnimationController(vsync: this, duration: const Duration(seconds: 4))
-        ..repeat();
 
-  // Gemini-style flowing palette.
-  static const _blue = Color(0xFF4285F4);
-  static const _purple = Color(0xFF9B72CB);
-  static const _pink = Color(0xFFD96570);
-  static const _cyan = Color(0xFF00BCD4);
+  late final List<List<double>> _pts = _fibonacciSphere(150);
+
+  static List<List<double>> _fibonacciSphere(int n) {
+    final out = <List<double>>[];
+    final phi = math.pi * (3 - math.sqrt(5)); // golden angle
+    for (var i = 0; i < n; i++) {
+      final y = 1 - (i / (n - 1)) * 2; // 1 → -1
+      final r = math.sqrt(1 - y * y);
+      final th = phi * i;
+      out.add([math.cos(th) * r, y, math.sin(th) * r]);
+    }
+    return out;
+  }
 
   @override
   void dispose() {
-    _pulse.dispose();
     _spin.dispose();
+    _pulse.dispose();
     super.dispose();
-  }
-
-  List<Color> get _palette {
-    switch (widget.state) {
-      case OrbState.recording:
-        return const [_pink, _purple, _blue, _pink];
-      case OrbState.thinking:
-        return const [_purple, _cyan, _blue, _purple];
-      default:
-        return const [_blue, _purple, _pink, _cyan, _blue];
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final active = widget.state == OrbState.listening ||
+        widget.state == OrbState.recording;
     return SizedBox(
       width: widget.size,
       height: widget.size,
       child: AnimatedBuilder(
-        animation: Listenable.merge([_pulse, _spin]),
+        animation: Listenable.merge([_spin, _pulse]),
         builder: (_, _) {
           final breathe = 0.5 + 0.5 * math.sin(_pulse.value * 2 * math.pi);
           return CustomPaint(
-            painter: _OrbPainter(
-              t: breathe,
-              spin: _spin.value * 2 * math.pi,
-              palette: _palette,
-              active: widget.state != OrbState.idle,
+            painter: _ParticleOrbPainter(
+              points: _pts,
+              spin: _spin.value * 2 * math.pi * (active ? 2.2 : 1),
+              breathe: breathe,
+              active: active,
               thinking: widget.state == OrbState.thinking,
+              speaking: widget.state == OrbState.speaking,
             ),
           );
         },
@@ -72,87 +72,97 @@ class _AssistantOrbState extends State<AssistantOrb>
   }
 }
 
-class _OrbPainter extends CustomPainter {
-  final double t; // 0..1 breathing
-  final double spin; // radians
-  final List<Color> palette;
-  final bool active;
-  final bool thinking;
+class _ParticleOrbPainter extends CustomPainter {
+  final List<List<double>> points;
+  final double spin, breathe;
+  final bool active, thinking, speaking;
 
-  _OrbPainter({
-    required this.t,
+  _ParticleOrbPainter({
+    required this.points,
     required this.spin,
-    required this.palette,
+    required this.breathe,
     required this.active,
     required this.thinking,
+    required this.speaking,
   });
+
+  static const _lumen = Color(0xFFDFE9FB);
+  static const _lumenBright = Color(0xFFF4F8FF);
+  static const _glowBlue = Color(0xFF96BEFF);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2;
-    final c1 = palette.first;
-    final c2 = palette.length > 2 ? palette[2] : palette.last;
+    final cx = size.width / 2, cy = size.height / 2;
+    final energy = active
+        ? 1.0
+        : thinking
+            ? 0.92
+            : speaking
+                ? 0.9
+                : 0.78;
+    final R = size.width * 0.33 * (1 + 0.03 * breathe + (active ? 0.05 : 0));
 
-    final pulseAmt = active ? 0.10 : 0.05;
-    final coreR = r * (0.52 + pulseAmt * t);
-
-    // Outer aura glow (blends two palette colours).
-    final aura = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          Color.lerp(c1, c2, t)!.withAlpha((90 * (0.6 + 0.4 * t)).round()),
-          c1.withAlpha(0),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: r));
-    canvas.drawCircle(center, r * (0.85 + 0.15 * t), aura);
-
-    // Rotating multi-colour ring (energy) — full Gemini sweep.
-    final ringRect = Rect.fromCircle(center: center, radius: coreR + r * 0.14);
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = r * 0.035
-      ..strokeCap = StrokeCap.round
-      ..shader = SweepGradient(
-        transform: GradientRotation(spin),
-        colors: palette,
-      ).createShader(ringRect);
-    final sweep = thinking ? math.pi * 1.3 : math.pi * 2;
-    canvas.drawArc(ringRect, spin, sweep, false, ring);
-
-    // Core sphere — colourful multi-stop radial with a bright highlight.
-    final core = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(-0.3, -0.4),
-        colors: [
-          Color.lerp(palette[0], Colors.white, 0.55)!,
-          palette[0],
-          palette.length > 1 ? palette[1] : palette[0],
-          Color.lerp(c2, Ak.bg0, 0.2)!,
-        ],
-        stops: const [0.0, 0.4, 0.72, 1.0],
-      ).createShader(Rect.fromCircle(center: center, radius: coreR));
-    canvas.drawCircle(center, coreR, core);
-
-    // Inner glossy highlight.
-    final gloss = Paint()
-      ..shader = RadialGradient(
-        colors: [Colors.white.withAlpha(70), Colors.white.withAlpha(0)],
-      ).createShader(Rect.fromCircle(
-          center: center.translate(-coreR * 0.28, -coreR * 0.32),
-          radius: coreR * 0.6));
+    // Outer halo glow.
+    final glowR = R * 1.9;
     canvas.drawCircle(
-        center.translate(-coreR * 0.28, -coreR * 0.32), coreR * 0.55, gloss);
+      Offset(cx, cy),
+      glowR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          _glowBlue.withValues(
+              alpha: 0.16 + 0.10 * breathe + (active ? 0.10 : 0)),
+          _glowBlue.withValues(alpha: 0),
+        ]).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: glowR)),
+    );
 
-    // Rim light.
-    final rim = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
-      ..color = Colors.white.withAlpha(40);
-    canvas.drawCircle(center, coreR, rim);
+    // Inner core light.
+    final coreR = R * 0.55;
+    canvas.drawCircle(
+      Offset(cx, cy),
+      coreR,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          _lumenBright.withValues(alpha: (0.45 + 0.25 * breathe) * energy),
+          _lumenBright.withValues(alpha: 0),
+        ]).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: coreR)),
+    );
+
+    // Project & depth-sort the particles.
+    const tilt = 0.42;
+    final cosT = math.cos(tilt), sinT = math.sin(tilt);
+    final cosY = math.cos(spin), sinY = math.sin(spin);
+    final proj = <List<double>>[]; // [sx, sy, depth]
+    for (final p in points) {
+      var x = p[0], y = p[1], z = p[2];
+      if (thinking) {
+        // twist by latitude for a swirling "thinking" feel
+        final tw = y * 1.5;
+        final cz = math.cos(tw), sz = math.sin(tw);
+        final nx = x * cz - z * sz;
+        z = x * sz + z * cz;
+        x = nx;
+      }
+      // rotate around Y, then tilt around X
+      final rx = x * cosY - z * sinY;
+      z = x * sinY + z * cosY;
+      x = rx;
+      final ry = y * cosT - z * sinT;
+      z = y * sinT + z * cosT;
+      y = ry;
+      proj.add([cx + x * R, cy + y * R, (z + 1) / 2]);
+    }
+    proj.sort((a, b) => a[2].compareTo(b[2]));
+
+    final dot = Paint();
+    for (final pr in proj) {
+      final depth = pr[2]; // 0 back → 1 front
+      final radius = 1.0 + depth * 2.3;
+      final alpha = ((0.10 + depth * 0.8) * energy).clamp(0.0, 1.0);
+      dot.color = (depth > 0.72 ? _lumenBright : _lumen).withValues(alpha: alpha);
+      canvas.drawCircle(Offset(pr[0], pr[1]), radius, dot);
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _OrbPainter old) =>
-      old.t != t || old.spin != spin || old.thinking != thinking;
+  bool shouldRepaint(covariant _ParticleOrbPainter old) => true;
 }

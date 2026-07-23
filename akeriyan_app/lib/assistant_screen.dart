@@ -962,34 +962,46 @@ class _AssistantScreenState extends State<AssistantScreen> {
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
               child: Column(
                 children: [
-                  Center(child: _statusPill(statusText)),
-                  const SizedBox(height: 20),
-                  // Hero: the orb — tap to talk
+                  // Presence — the particle orb; tap to talk
                   GestureDetector(
                     onTap: _thinking ? null : _toggleMic,
-                    child: AssistantOrb(state: state, size: 208),
-                  ),
-                  const SizedBox(height: 16),
-                  Center(child: _brainStatusChip()),
-                  const SizedBox(height: 14),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: Text(
-                      _heard,
-                      key: ValueKey(_heard),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 18,
-                          color: Ak.textHi,
-                          fontWeight: FontWeight.w500,
-                          height: 1.3),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 22, horizontal: 18),
+                      decoration: Ak.bento(glow: _recording || _wakeActive),
+                      child: Column(
+                        children: [
+                          AssistantOrb(state: state, size: 140),
+                          const SizedBox(height: 14),
+                          Text(statusText,
+                              style: const TextStyle(
+                                  color: Ak.textMid, fontSize: 13)),
+                          const SizedBox(height: 8),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            child: Text(
+                              _heard,
+                              key: ValueKey(_heard),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Ak.textHi,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.3),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   if (_response.isNotEmpty) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     _responseCard(),
                   ],
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 14),
+                  Center(child: _brainStatusChip()),
+                  const SizedBox(height: 22),
                   _sectionLabel('QUICK ASK'),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -1004,10 +1016,10 @@ class _AssistantScreenState extends State<AssistantScreen> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 22),
                   _sectionLabel('EXPLORE'),
                   const SizedBox(height: 12),
-                  _bentoGrid(),
+                  _deckGrid(),
                 ],
               ),
             ),
@@ -1024,30 +1036,6 @@ class _AssistantScreenState extends State<AssistantScreen> {
           child: Text(s, style: Ak.display(size: 13, color: Ak.textMid, spacing: 3)),
         ),
       );
-
-  Widget _statusPill(String text) {
-    final live = _wakeActive || _recording;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: Ak.glass(radius: 30),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: live ? Ak.green : Ak.textLo,
-              boxShadow: live ? Ak.glow(Ak.green, blur: 10) : null,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(text, style: const TextStyle(color: Ak.textMid, fontSize: 13)),
-        ],
-      ),
-    );
-  }
 
   Widget _responseCard() {
     return Container(
@@ -1080,65 +1068,69 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
-  Widget _bentoGrid() {
-    final features = <(String, IconData, Widget, bool)>[
-      ('Markets', Icons.candlestick_chart,
-          TradingScreen(backendUrl: widget.backendUrl, token: widget.token), true),
-      ('CRM', Icons.business_center,
-          CrmScreen(backendUrl: widget.backendUrl, token: widget.token), false),
-      ('Vision', Icons.center_focus_strong,
-          VisionScreen(backendUrl: widget.backendUrl, token: widget.token), false),
-      ('Alerts', Icons.notifications_active_outlined,
-          AlertsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
-      ('Projects', Icons.folder_open,
-          ProjectsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
-      ('Meeting', Icons.mic_none,
+  Widget _deckGrid() {
+    final features = <(String, String, IconData, Widget, bool)>[
+      ('Vision', 'Camera + ask', Icons.center_focus_strong,
+          VisionScreen(backendUrl: widget.backendUrl, token: widget.token), true),
+      ('Markets', 'Charts & trades', Icons.candlestick_chart,
+          TradingScreen(backendUrl: widget.backendUrl, token: widget.token), false),
+      ('On-device AI', 'Your phone brain', Icons.memory,
+          const GemmaTestScreen(), true),
+      ('Memory', 'Past chats', Icons.history, const HistoryScreen(), false),
+      ('Meeting', 'Record & sum up', Icons.mic_none,
           MeetingScreen(backendUrl: widget.backendUrl, token: widget.token), false),
-      ('Documents', Icons.menu_book,
-          DocsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
-      ('Invoice', Icons.receipt_long, const InvoiceScreen(), false),
-      ('Trading', Icons.show_chart,
-          TradingToolsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
-      ('Email', Icons.mail_outline,
+      ('Email', 'Inbox & compose', Icons.mail_outline,
           EmailScreen(backendUrl: widget.backendUrl, token: widget.token), false),
-      ('History', Icons.history, const HistoryScreen(), false),
-      ('On-device AI', Icons.memory, const GemmaTestScreen(), true),
+      ('Alerts', 'Price & RSI', Icons.notifications_active_outlined,
+          AlertsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
+      ('CRM', 'Leads & pipeline', Icons.business_center,
+          CrmScreen(backendUrl: widget.backendUrl, token: widget.token), false),
+      ('Projects', 'Tasks & notes', Icons.folder_open,
+          ProjectsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
+      ('Documents', 'Ask your notes', Icons.menu_book,
+          DocsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
     ];
     return GridView.count(
-      crossAxisCount: 3,
+      crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 0.94,
+      childAspectRatio: 1.62,
       children: [
-        for (final (label, icon, screen, glow) in features)
-          _bentoTile(label, icon, () => _go(screen), glow: glow),
+        for (final (label, sub, icon, screen, glow) in features)
+          _deckTile(label, sub, icon, () => _go(screen), glow: glow),
       ],
     );
   }
 
-  Widget _bentoTile(String label, IconData icon, VoidCallback onTap,
-      {bool glow = false}) {
+  Widget _deckTile(String label, String subtitle, IconData icon,
+      VoidCallback onTap, {bool glow = false}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        decoration: Ak.bento(radius: 20, glow: glow),
+        padding: const EdgeInsets.all(15),
+        decoration: Ak.bento(radius: 18, glow: glow),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(11),
+              padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: glow ? const Color(0x2696BEFF) : Ak.glassFill,
               ),
-              child: Icon(icon, color: glow ? Ak.gold : Ak.textHi, size: 22),
+              child: Icon(icon, color: glow ? Ak.gold : Ak.textHi, size: 19),
             ),
-            const SizedBox(height: 10),
+            const Spacer(),
             Text(label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Ak.textMid, fontSize: 11.5)),
+                style: const TextStyle(
+                    color: Ak.textHi,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(subtitle,
+                style: const TextStyle(color: Ak.textLo, fontSize: 11)),
           ],
         ),
       ),
