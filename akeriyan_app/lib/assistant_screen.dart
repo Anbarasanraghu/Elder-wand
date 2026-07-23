@@ -30,6 +30,7 @@ import 'sms_sender.dart';
 import 'flashlight_service.dart';
 import 'history_store.dart';
 import 'gemma_test_screen.dart';
+import 'gemma_service.dart';
 import 'history_screen.dart';
 import 'trading_screen.dart';
 import 'scalp_screen.dart';
@@ -262,7 +263,14 @@ class _AssistantScreenState extends State<AssistantScreen> {
       }
       setState(() => _heard = '"$text"');
 
-      // 2. Text -> understanding. Try the STREAMING endpoint first: plain chat
+      // 2a. ON-DEVICE brain first: if Gemma is loaded and this is plain
+      // conversation (not an action), answer entirely on the phone — no PC.
+      final handledOnDevice = await _tryGemmaChat(text);
+      if (handledOnDevice) spoke = true;
+
+      // 2. Backend path — actions/skills, or when Gemma isn't loaded.
+      if (!handledOnDevice) {
+      // Text -> understanding. Try the STREAMING endpoint first: plain chat
       // is spoken sentence-by-sentence as it generates (fast, "Google-like").
       // Actions come back as one result we handle exactly as before. Any
       // streaming failure falls back to the classic /nlu/parse one-shot.
@@ -326,6 +334,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
         await TtsService.speak(speak,
             lang: (nluData['speak_lang'] as String?) ?? 'en');
       }
+      } // end backend path (on-device Gemma didn't handle it)
     } catch (e) {
       setState(() => _heard = 'Error: $e');
     } finally {
@@ -338,6 +347,41 @@ class _AssistantScreenState extends State<AssistantScreen> {
       } else {
         await _resumeWake();
       }
+    }
+  }
+
+  // Action/skill keywords — when NONE appear it's plain conversation the
+  // on-device Gemma can answer itself (mirrors the backend's routing).
+  static final RegExp _actionHint = RegExp(
+      r'\b(remind|reminder|alarm|timer|call|dial|ring|text|sms|message|whatsapp|'
+      r'open|launch|flashlight|torch|notification|weather|temperature|forecast|'
+      r'news|headline|briefing|email|inbox|gmail|mail|lead|pipeline|crm|remember|'
+      r'forget|translate|search|google|price|chart|market|stock|crypto|bitcoin|'
+      r'ethereum|buy|sell|trade|trading|analysis|analyse|analyze|scalp|watch|'
+      r'monitor|gold|silver|forex|routine)\b',
+      caseSensitive: false);
+
+  /// If the on-device Gemma model is loaded and this is plain conversation
+  /// (not an action), answer it entirely on the phone (LLM) and speak the
+  /// reply. Returns true if handled on-device; false to fall back to the
+  /// backend (actions, or Gemma not loaded, or any error).
+  Future<bool> _tryGemmaChat(String text) async {
+    if (!GemmaService.isLoaded || _actionHint.hasMatch(text)) return false;
+    try {
+      final sb = StringBuffer();
+      setState(() => _response = '');
+      await for (final tok in GemmaService.ask(text)) {
+        sb.write(tok);
+        setState(() => _response = sb.toString());
+      }
+      final reply = sb.toString().trim();
+      if (reply.isEmpty) return false;
+      setState(() => _response = reply);
+      HistoryStore.add(youSaid: text, akeriyanSaid: reply, intent: 'chat');
+      await TtsService.speak(reply); // Piper if PC on, device TTS if off
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
