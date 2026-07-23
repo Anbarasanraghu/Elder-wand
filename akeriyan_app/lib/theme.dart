@@ -15,30 +15,31 @@ class Ak {
   // ---- Dot-matrix display font (registered in pubspec as "NDot") ----
   static const String dot = 'NDot';
 
-  // ---- Signature colours (warm amber "bento" theme) ----
-  static const purple = Color(0xFFF2A64C);     // primary WARM AMBER accent
-  static const purpleSoft = Color(0xFFFFCB8A); // light amber
-  static const purpleDeep = Color(0xFFB56420); // deep amber / burnt orange
-  static const silver = Color(0xFFCBC6BD);     // warm silver (secondary)
-  static const glowOrange = Color(0xFFFF8A3D); // ambient corner glow
+  // ---- Signature colours ("Glyph" — obsidian & moonlight, monochrome) ----
+  // The only "colour" is luminance: a cool wand-light white for anything alive.
+  static const purple = Color(0xFFDFE9FB);     // primary accent -> cool wand-light
+  static const purpleSoft = Color(0xFFF4F8FF); // brightest lumen
+  static const purpleDeep = Color(0xFF6F80A0); // cool steel (gradient end)
+  static const silver = Color(0xFF8B939D);     // cool silver (secondary/structure)
+  static const glowOrange = Color(0xFF96BEFF); // cool ambient glow
 
-  // ---- Core palette (warm near-black canvas) ----
-  static const bg0 = Color(0xFF070605); // warm pure black
-  static const bg1 = Color(0xFF0E0C0A); // near-black, faint warm tint
-  static const bg2 = Color(0xFF17130F); // warm charcoal (bento tile base)
+  // ---- Core palette (obsidian canvas, faint blue bias) ----
+  static const bg0 = Color(0xFF070809); // obsidian
+  static const bg1 = Color(0xFF0B0D10); // near-black, faint cool tint
+  static const bg2 = Color(0xFF0F1216); // surface (tile base)
 
-  // Legacy accent names remapped to the amber scheme (keeps screens working):
-  static const gold = purple;            // primary accent  -> amber
-  static const amber = purpleSoft;       // light amber
-  static const orange = purpleDeep;      // deep amber (gradient / glow)
-  static const cyan = silver;            // secondary accent -> warm silver
-  static const violet = Color(0xFFE59A57); // amber variant
-  static const pink = Color(0xFFFFB27A); // alerts -> soft amber (no red)
-  static const green = Color(0xFF7BE0A3); // live / connected -> soft mint
+  // Legacy accent names remapped to the Glyph scheme (keeps screens working):
+  static const gold = purple;            // primary accent  -> wand-light
+  static const amber = purpleSoft;       // brightest lumen
+  static const orange = purpleDeep;      // cool steel (gradient / depth)
+  static const cyan = silver;            // secondary accent -> cool silver
+  static const violet = Color(0xFFB9C9E8); // cool light variant
+  static const pink = Color(0xFFC3D2EC); // alerts -> soft cool (no red)
+  static const green = Color(0xFF9FDFC9); // live / connected -> soft cool mint
 
-  static const textHi = Color(0xFFF4EFE8); // warm white
-  static const textMid = Color(0xFFA8A197); // warm silver
-  static const textLo = Color(0xFF6A655D);  // dim warm grey
+  static const textHi = Color(0xFFEAEFF6); // moon-white
+  static const textMid = Color(0xFF8B939D); // cool silver
+  static const textLo = Color(0xFF565D67);  // dim cool grey
 
   // ---- Market data semantics (trading / scalp / pro screens ONLY) ----
   // Conventional green-up / red-down colours for candles, trend lines, bias,
@@ -86,11 +87,11 @@ class Ak {
         gradient: tint == null ? _bentoFill : null,
         color: tint,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: glow ? const Color(0x40F2A64C) : glassLine),
+        border: Border.all(color: glow ? const Color(0x4096BEFF) : glassLine),
         boxShadow: glow
             ? [
                 const BoxShadow(
-                    color: Color(0x33F2A64C), blurRadius: 34, spreadRadius: -6),
+                    color: Color(0x2E96BEFF), blurRadius: 34, spreadRadius: -6),
               ]
             : const [
                 BoxShadow(
@@ -114,14 +115,14 @@ class Ak {
         child: Stack(
           children: [
             Positioned(
-              top: -120,
-              right: -80,
-              child: _glowBlob(const Color(0x33FF8A3D), 320),
+              top: -130,
+              right: -90,
+              child: _glowBlob(const Color(0x2696BEFF), 340),
             ),
             Positioned(
-              bottom: -140,
-              left: -100,
-              child: _glowBlob(const Color(0x22B56420), 340),
+              bottom: -150,
+              left: -110,
+              child: _glowBlob(const Color(0x16586C9A), 360),
             ),
           ],
         ),

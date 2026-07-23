@@ -1131,7 +1131,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
               padding: const EdgeInsets.all(11),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: glow ? const Color(0x33F2A64C) : Ak.glassFill,
+                color: glow ? const Color(0x2696BEFF) : Ak.glassFill,
               ),
               child: Icon(icon, color: glow ? Ak.gold : Ak.textHi, size: 22),
             ),
