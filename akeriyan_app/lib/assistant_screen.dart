@@ -31,6 +31,7 @@ import 'flashlight_service.dart';
 import 'history_store.dart';
 import 'gemma_test_screen.dart';
 import 'gemma_service.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'history_screen.dart';
 import 'trading_screen.dart';
 import 'scalp_screen.dart';
@@ -58,12 +59,15 @@ class _AssistantScreenState extends State<AssistantScreen> {
   final _recorder = AudioRecorder();
   final _dio = Dio();
   final _wake = OpenWakeWordService();
+  final stt.SpeechToText _stt = stt.SpeechToText(); // on-device speech-to-text
+  bool _sttReady = false;
 
   bool _wakeActive = false;
   Timer? _autoStop;
   String _response = '';
   bool _recording = false;
   bool _thinking = false;
+  bool _lastOnDevice = false; // was the last reply produced fully on the phone?
   String _heard = 'Say "Hey Elder Wand" or tap the orb';
 
   @override
@@ -104,7 +108,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     SystemSound.play(SystemSoundType.click); // earcon: "I'm awake"
     await TtsService.speak('Yes?');
     await Future.delayed(const Duration(milliseconds: 600));
-    if (await _startRecording()) _beginEndpointing();
+    await _onDeviceTurn(); // on-device STT (falls back to recorder+Whisper)
   }
 
   /// End the command recording as soon as you stop talking (a short pause),
@@ -153,9 +157,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
   /// follow-up so you don't have to say "Hey Akeriyan" again. If you stay
   /// silent it slips back to wake-word listening on its own.
   Future<void> _listenForFollowUp() async {
-    if (!await _startRecording()) return;
-    if (mounted) setState(() => _heard = 'Listening… (follow-up)');
-    _beginEndpointing(followUp: true);
+    await _onDeviceTurn(followUp: true);
   }
   
 
@@ -163,6 +165,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
   void dispose() {
     _autoStop?.cancel();
     _wake.stop();
+    _stt.stop();
     TtsService.stop();
     AlertsPoller.stop();
     super.dispose();
@@ -171,12 +174,16 @@ class _AssistantScreenState extends State<AssistantScreen> {
   Future<void> _toggleMic() async {
     if (_recording) {
       _autoStop?.cancel();
-      await _stopAndTranscribe();
+      if (_stt.isListening) {
+        await _stt.stop(); // finalises on-device STT -> _onDeviceTurn continues
+      } else {
+        await _stopAndTranscribe();
+      }
     } else {
       // Manual mic press: pause wake listening so it doesn't fight for the mic.
       await _wake.stop();
       setState(() => _wakeActive = false);
-      await _startRecording();
+      await _onDeviceTurn();
     }
   }
 
@@ -222,7 +229,6 @@ class _AssistantScreenState extends State<AssistantScreen> {
   }
 
   Future<void> _stopAndTranscribe() async {
-    bool spoke = false;
     final path = await _recorder.stop();
     setState(() {
       _recording = false;
@@ -242,11 +248,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
     
 
     try {
-      // 1. Speech -> text
+      // 1. Speech -> text via backend Whisper (fallback path; on-device STT is
+      // preferred and handled in _onDeviceTurn).
       final form = FormData.fromMap({
         'audio': await MultipartFile.fromFile(path, filename: 'input.m4a'),
       });
-      final stt = await _dio.post(
+      final sttResp = await _dio.post(
         '${widget.backendUrl}/v1/stt',
         data: form,
         options: Options(
@@ -254,94 +261,144 @@ class _AssistantScreenState extends State<AssistantScreen> {
           receiveTimeout: const Duration(minutes: 5),
         ),
       );
-      final text = (stt.data['text'] as String?) ?? '';
-      // Bilingual: if you spoke Tamil, reply in Tamil.
-      final lang = (stt.data['language'] == 'ta') ? 'ta' : 'en';
-      if (text.isEmpty) {
-        setState(() => _heard = "I didn't catch that. Try again.");
+      final text = (sttResp.data['text'] as String?) ?? '';
+      final lang = (sttResp.data['language'] == 'ta') ? 'ta' : 'en';
+      if (text.trim().isEmpty) {
+        setState(() {
+          _thinking = false;
+          _heard = "I didn't catch that. Try again.";
+        });
+        await _resumeWake();
         return;
       }
-      setState(() => _heard = '"$text"');
+      await _finishTurn(text, lang);
+    } catch (e) {
+      setState(() {
+        _thinking = false;
+        _heard = 'Error: $e';
+      });
+      await _resumeWake();
+    }
+  }
 
-      // 2a. ON-DEVICE brain first: if Gemma is loaded and this is plain
-      // conversation (not an action), answer entirely on the phone — no PC.
+  /// Fully on-device capture: release the wake mic, listen with the phone's
+  /// speech_to_text (no backend/Whisper), then respond. Falls back to the
+  /// recorder + backend Whisper if on-device recognition isn't available.
+  Future<void> _onDeviceTurn({bool followUp = false}) async {
+    await _wake.stop();
+    if (mounted) setState(() => _wakeActive = false);
+    _sttReady = _sttReady ||
+        await _stt.initialize(onError: (_) {}, onStatus: (_) {});
+    if (!_sttReady) {
+      if (await _startRecording()) _beginEndpointing(followUp: followUp);
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _recording = true;
+        _heard = followUp ? 'Listening… (follow-up)' : 'Listening…';
+      });
+    }
+    final completer = Completer<String>();
+    await _stt.listen(
+      onResult: (r) {
+        if (mounted) setState(() => _heard = '"${r.recognizedWords}"');
+        if (r.finalResult && !completer.isCompleted) {
+          completer.complete(r.recognizedWords);
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        listenFor: const Duration(seconds: 30),
+        pauseFor: Duration(seconds: followUp ? 3 : 4),
+      ),
+    );
+    final text = await completer.future
+        .timeout(const Duration(seconds: 35), onTimeout: () => '');
+    if (mounted) setState(() => _recording = false);
+    if (text.trim().isEmpty) {
+      if (!followUp && mounted) {
+        setState(() => _heard = "I didn't catch that. Try again.");
+      }
+      await _resumeWake();
+      return;
+    }
+    await _finishTurn(text, 'en'); // on-device STT uses the device locale
+  }
+
+  /// Given recognized [text], understand + respond — on-device Gemma for plain
+  /// chat, backend for actions — then speak. Shared by both STT paths.
+  Future<void> _finishTurn(String text, String lang) async {
+    bool spoke = false;
+    setState(() {
+      _thinking = true;
+      _heard = '"$text"';
+      _response = '';
+    });
+    try {
+      // On-device brain first: plain conversation answered on the phone.
       final handledOnDevice = await _tryGemmaChat(text);
       if (handledOnDevice) spoke = true;
 
-      // 2. Backend path — actions/skills, or when Gemma isn't loaded.
+      // Backend path — actions/skills, or when Gemma isn't loaded.
       if (!handledOnDevice) {
-      // Text -> understanding. Try the STREAMING endpoint first: plain chat
-      // is spoken sentence-by-sentence as it generates (fast, "Google-like").
-      // Actions come back as one result we handle exactly as before. Any
-      // streaming failure falls back to the classic /nlu/parse one-shot.
-      Map<String, dynamic>? nluData;
-      bool chatStreamed = false;
-      String streamedSpeak = '';
-      try {
-        final r = await _converseStream(text, lang);
-        if (r['mode'] == 'chat') {
-          chatStreamed = true;
-          streamedSpeak = (r['speak'] as String?) ?? '';
-        } else {
-          nluData = (r['data'] as Map).cast<String, dynamic>();
-        }
-      } catch (_) {
-        final nlu = await _dio.post(
-          '${widget.backendUrl}/v1/nlu/parse',
-          data: await _nluBody(text, lang: lang),
-          options: Options(
-            headers: {'Authorization': 'Bearer ${widget.token}'},
-          ),
-        );
-        nluData = (nlu.data as Map).cast<String, dynamic>();
-      }
-
-      if (chatStreamed) {
-        // Audio already streamed + played by TtsService's queue.
-        setState(() => _response = streamedSpeak);
-        HistoryStore.add(
-            youSaid: text, akeriyanSaid: streamedSpeak, intent: 'chat');
-        spoke = true;
-      } else {
-        String speak = (nluData!['speak'] as String?) ?? '';
-        final intent = nluData['intent'] as String?;
-        final slots = (nluData['slots'] as Map?) ?? {};
-
-        // 3. ACT on the command(s). Multi-step returns several ordered actions.
-        final actions = nluData['actions'] as List?;
-        if (intent == 'multi' && actions != null && actions.isNotEmpty) {
-          for (final a in actions) {
-            final m = a as Map;
-            await _handleIntent(
-              m['intent'] as String?,
-              (m['slots'] as Map?) ?? {},
-              (m['speak'] as String?) ?? '',
-            );
+        _lastOnDevice = false;
+        Map<String, dynamic>? nluData;
+        bool chatStreamed = false;
+        String streamedSpeak = '';
+        try {
+          final r = await _converseStream(text, lang);
+          if (r['mode'] == 'chat') {
+            chatStreamed = true;
+            streamedSpeak = (r['speak'] as String?) ?? '';
+          } else {
+            nluData = (r['data'] as Map).cast<String, dynamic>();
           }
-          // `speak` already holds the combined line from the backend.
-        } else {
-          speak = await _handleIntent(intent, slots, speak);
+        } catch (_) {
+          final nlu = await _dio.post(
+            '${widget.backendUrl}/v1/nlu/parse',
+            data: await _nluBody(text, lang: lang),
+            options: Options(
+              headers: {'Authorization': 'Bearer ${widget.token}'},
+            ),
+          );
+          nluData = (nlu.data as Map).cast<String, dynamic>();
         }
 
-        // 4. Speak the reply + log to history
-        setState(() => _response = speak);
-        HistoryStore.add(
-          youSaid: text,
-          akeriyanSaid: speak,
-          intent: intent ?? 'unknown',
-        );
-        spoke = true;
-        await TtsService.speak(speak,
-            lang: (nluData['speak_lang'] as String?) ?? 'en');
+        if (chatStreamed) {
+          setState(() => _response = streamedSpeak);
+          HistoryStore.add(
+              youSaid: text, akeriyanSaid: streamedSpeak, intent: 'chat');
+          spoke = true;
+        } else {
+          String speak = (nluData!['speak'] as String?) ?? '';
+          final intent = nluData['intent'] as String?;
+          final slots = (nluData['slots'] as Map?) ?? {};
+          final actions = nluData['actions'] as List?;
+          if (intent == 'multi' && actions != null && actions.isNotEmpty) {
+            for (final a in actions) {
+              final m = a as Map;
+              await _handleIntent(
+                m['intent'] as String?,
+                (m['slots'] as Map?) ?? {},
+                (m['speak'] as String?) ?? '',
+              );
+            }
+          } else {
+            speak = await _handleIntent(intent, slots, speak);
+          }
+          setState(() => _response = speak);
+          HistoryStore.add(
+              youSaid: text, akeriyanSaid: speak, intent: intent ?? 'unknown');
+          spoke = true;
+          await TtsService.speak(speak,
+              lang: (nluData['speak_lang'] as String?) ?? 'en');
+        }
       }
-      } // end backend path (on-device Gemma didn't handle it)
     } catch (e) {
       setState(() => _heard = 'Error: $e');
     } finally {
       _autoStop?.cancel();
       setState(() => _thinking = false);
-      // Continuous conversation: if we just answered, listen for a follow-up;
-      // otherwise fall back to waiting for the "Hey Akeriyan" wake word.
       if (spoke) {
         await _listenForFollowUp();
       } else {
@@ -369,18 +426,25 @@ class _AssistantScreenState extends State<AssistantScreen> {
     if (!GemmaService.isLoaded || _actionHint.hasMatch(text)) return false;
     try {
       final sb = StringBuffer();
-      setState(() => _response = '');
+      setState(() {
+        _response = '';
+        _lastOnDevice = true; // this reply is coming from the phone
+      });
       await for (final tok in GemmaService.ask(text)) {
         sb.write(tok);
         setState(() => _response = sb.toString());
       }
       final reply = sb.toString().trim();
-      if (reply.isEmpty) return false;
+      if (reply.isEmpty) {
+        setState(() => _lastOnDevice = false);
+        return false;
+      }
       setState(() => _response = reply);
       HistoryStore.add(youSaid: text, akeriyanSaid: reply, intent: 'chat');
       await TtsService.speak(reply); // Piper if PC on, device TTS if off
       return true;
     } catch (_) {
+      setState(() => _lastOnDevice = false);
       return false;
     }
   }
@@ -869,11 +933,39 @@ class _AssistantScreenState extends State<AssistantScreen> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(_response,
-                              style: const TextStyle(
-                                  fontSize: 15,
-                                  color: Ak.textHi,
-                                  height: 1.4)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_lastOnDevice)
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.tealAccent.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.smartphone,
+                                          size: 12, color: Colors.tealAccent),
+                                      SizedBox(width: 4),
+                                      Text('On-device',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.tealAccent,
+                                              fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                ),
+                              Text(_response,
+                                  style: const TextStyle(
+                                      fontSize: 15,
+                                      color: Ak.textHi,
+                                      height: 1.4)),
+                            ],
+                          ),
                         ),
                       ],
                     ),
