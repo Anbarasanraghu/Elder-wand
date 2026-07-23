@@ -171,6 +171,32 @@ class _AssistantScreenState extends State<AssistantScreen> {
     super.dispose();
   }
 
+  /// Small chip showing which brain produced the current reply:
+  /// teal "On-device" (phone/Gemma) or amber "Backend (PC)".
+  Widget _brainBadge() {
+    final onDevice = _lastOnDevice;
+    final color = onDevice ? Colors.tealAccent : Colors.amberAccent;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(onDevice ? Icons.smartphone : Icons.dns,
+              size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(onDevice ? 'On-device' : 'Backend (PC)',
+              style: TextStyle(
+                  fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
   Future<void> _toggleMic() async {
     if (_recording) {
       _autoStop?.cancel();
@@ -936,29 +962,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (_lastOnDevice)
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.tealAccent.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.smartphone,
-                                          size: 12, color: Colors.tealAccent),
-                                      SizedBox(width: 4),
-                                      Text('On-device',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.tealAccent,
-                                              fontWeight: FontWeight.w600)),
-                                    ],
-                                  ),
-                                ),
+                              _brainBadge(),
                               Text(_response,
                                   style: const TextStyle(
                                       fontSize: 15,
