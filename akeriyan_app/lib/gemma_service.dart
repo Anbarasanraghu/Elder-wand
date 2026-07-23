@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 
@@ -52,7 +53,33 @@ class GemmaService {
     if (isDownloading) return;
     final sw = Stopwatch()..start();
     download.value = const GemmaDownload(running: true);
-    final token = (hfToken == null || hfToken.trim().isEmpty) ? null : hfToken.trim();
+    final token =
+        (hfToken == null || hfToken.trim().isEmpty) ? null : hfToken.trim();
+
+    // Fetch total size first (a 1-byte ranged GET → Content-Range: .../TOTAL),
+    // so we can show downloaded MB / speed / ETA from the plugin's % progress.
+    var total = 0;
+    try {
+      final r = await Dio().get<List<int>>(
+        url,
+        options: Options(
+          followRedirects: true,
+          responseType: ResponseType.bytes,
+          validateStatus: (s) => s != null && s < 400,
+          headers: {
+            'Range': 'bytes=0-0',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+      final cr = r.headers.value('content-range');
+      if (cr != null && cr.contains('/')) {
+        total = int.tryParse(cr.split('/').last.trim()) ?? 0;
+      }
+    } catch (_) {}
+
+    var lastReceived = 0;
+    var lastMs = 0;
     try {
       await FlutterGemma
           .installModel(
@@ -61,15 +88,36 @@ class GemmaService {
           )
           .fromNetwork(url, token: token)
           .withProgress((p) {
+            final received = total > 0 ? (p / 100.0 * total).round() : 0;
+            final nowMs = sw.elapsedMilliseconds;
+            var speed = download.value.speed;
+            var eta = download.value.eta;
+            if (nowMs - lastMs >= 500) {
+              final dt = (nowMs - lastMs) / 1000.0;
+              if (dt > 0 && lastMs > 0 && total > 0) {
+                speed = (received - lastReceived) / dt;
+                eta = speed > 0 ? (total - received) / speed : 0;
+              }
+              lastReceived = received;
+              lastMs = nowMs;
+            }
             download.value = GemmaDownload(
               percent: p,
+              received: received,
+              total: total,
+              speed: speed,
+              eta: eta,
               running: true,
               elapsedSec: sw.elapsed.inSeconds,
             );
           })
           .install();
       download.value = GemmaDownload(
-          percent: 100, done: true, elapsedSec: sw.elapsed.inSeconds);
+          percent: 100,
+          received: total,
+          total: total,
+          done: true,
+          elapsedSec: sw.elapsed.inSeconds);
     } catch (e) {
       download.value = GemmaDownload(error: e.toString());
     }
@@ -121,6 +169,10 @@ class GemmaService {
 /// [GemmaService.download] so any screen can reflect the live state.
 class GemmaDownload {
   final int percent; // 0..100
+  final int received; // bytes (estimated from percent × total)
+  final int total; // bytes
+  final double speed; // bytes/sec
+  final double eta; // seconds remaining
   final bool running;
   final bool done;
   final String? error;
@@ -128,6 +180,10 @@ class GemmaDownload {
 
   const GemmaDownload({
     this.percent = 0,
+    this.received = 0,
+    this.total = 0,
+    this.speed = 0,
+    this.eta = 0,
     this.running = false,
     this.done = false,
     this.error,

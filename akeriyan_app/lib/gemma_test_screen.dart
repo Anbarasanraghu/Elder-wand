@@ -61,6 +61,26 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
     return m > 0 ? '${m}m ${sec}s' : '${sec}s';
   }
 
+  String _mb(int b) =>
+      b <= 0 ? '—' : '${(b / (1024 * 1024)).toStringAsFixed(0)} MB';
+  String _spd(double bps) =>
+      bps <= 0 ? '—' : '${(bps / (1024 * 1024)).toStringAsFixed(2)} MB/s';
+  String _eta(double s) {
+    if (s <= 0 || s.isInfinite || s.isNaN) return '—';
+    final m = s ~/ 60, sec = (s % 60).round();
+    return m > 0 ? '${m}m ${sec}s' : '${sec}s';
+  }
+
+  Widget _stat(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          Text(value,
+              style:
+                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        ],
+      );
+
   void _download() {
     // Fire-and-forget: the service owns the download, so it keeps running even
     // if you leave this screen. We just watch GemmaService.download.
@@ -185,6 +205,16 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
                             '${d.percent}%   •   ${_elapsed(d.elapsedSec)} elapsed',
                             textAlign: TextAlign.center,
                             style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _stat('Downloaded',
+                                  '${_mb(d.received)}${d.total > 0 ? ' / ${_mb(d.total)}' : ''}'),
+                              _stat('Speed', _spd(d.speed)),
+                              _stat('ETA', _eta(d.eta)),
+                            ],
                           ),
                           const SizedBox(height: 12),
                         ],
