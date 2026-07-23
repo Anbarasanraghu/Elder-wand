@@ -5,6 +5,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 
 import 'gemma_service.dart';
+import 'openwakeword_service.dart';
 
 /// Proof-of-concept screen to try the on-device Gemma brain on the real phone:
 /// download a model (with live speed/size/ETA that survives leaving the page),
@@ -55,9 +56,17 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
       setState(() => _listening = false);
       return;
     }
-    _sttReady = _sttReady || await _stt.initialize();
+    // Release the mic from the wake-word listener so STT can use it.
+    await OpenWakeWordService.pauseGlobal();
+    _sttReady = _sttReady ||
+        await _stt.initialize(
+          onError: (e) => setState(() => _status = 'STT error: ${e.errorMsg}'),
+          onStatus: (s) => setState(() => _status = 'Mic: $s'),
+        );
     if (!_sttReady) {
-      setState(() => _status = 'Speech recognition unavailable (mic permission?).');
+      setState(() => _status =
+          'Speech recognition unavailable. Grant mic permission and make sure '
+          'a speech service (Google) is installed.');
       return;
     }
     setState(() {
