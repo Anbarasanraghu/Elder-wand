@@ -68,6 +68,17 @@
         <action android:name="android.service.notification.NotificationListenerService" />
     </intent-filter>
 </service>
+        <!-- flutter_gemma: lets the on-device LLM use the GPU (OpenCL) when present. -->
+        <uses-native-library
+            android:name="libOpenCL.so"
+            android:required="false" />
+        <uses-native-library
+            android:name="libOpenCL-car.so"
+            android:required="false" />
+        <uses-native-library
+            android:name="libOpenCL-pixel.so"
+            android:required="false" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

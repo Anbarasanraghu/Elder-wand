@@ -29,6 +29,7 @@ import 'phone_caller.dart';
 import 'sms_sender.dart';
 import 'flashlight_service.dart';
 import 'history_store.dart';
+import 'gemma_test_screen.dart';
 import 'history_screen.dart';
 import 'trading_screen.dart';
 import 'scalp_screen.dart';
@@ -715,6 +716,8 @@ class _AssistantScreenState extends State<AssistantScreen> {
                   _go(const HistoryScreen());
                 case 9:
                   _go(const AppsListScreen());
+                case 10:
+                  _go(const GemmaTestScreen());
               }
             },
             itemBuilder: (_) => const [
@@ -742,6 +745,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
               PopupMenuItem(
                   value: 8, child: _MenuRow(Icons.history, 'History')),
               PopupMenuItem(value: 9, child: _MenuRow(Icons.apps, 'Apps')),
+              PopupMenuItem(
+                  value: 10,
+                  child: _MenuRow(Icons.memory, 'On-device AI (test)')),
             ],
           ),
           const SizedBox(width: 6),
