@@ -28,12 +28,14 @@ class GemmaService {
   static InferenceModel? _model;
   static InferenceChat? _chat;
 
-  /// Default first-test model: Gemma 3 1B (int4), ~550 MB. Small + fast to prove
-  /// the pipeline. Swap to a Nano E2B/E4B .task later for a smarter, multimodal
-  /// model (your 12 GB phone can handle it).
+  /// Upgraded default: Gemma 3 Nano E2B (int4), ~3.1 GB — much smarter than the
+  /// 1B and multimodal (can also see images). Your 12 GB phone handles it well.
+  /// Gated: accept the license at huggingface.co/google/gemma-3n-E2B-it-litert-preview
+  /// then use your HF token. (The tiny Gemma3-1B-IT/gemma3-1b-it-int4.task is a
+  /// lighter fallback if you want a faster/smaller model.)
   static const String defaultModelUrl =
-      'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/'
-      'gemma3-1b-it-int4.task';
+      'https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/'
+      'gemma-3n-E2B-it-int4.task';
 
   static bool get isLoaded => _model != null && _chat != null;
 
