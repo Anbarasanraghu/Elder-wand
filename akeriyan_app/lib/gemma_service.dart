@@ -45,7 +45,7 @@ class GemmaService {
     return '${dir.path}/gemma_model.task';
   }
 
-  static CancelToken? _dlCancel;
+  static bool _cancelled = false;
 
   /// Live download state, owned by the service (not any screen). The download
   /// keeps running when you leave the page; reopening just re-reads this.
@@ -54,67 +54,140 @@ class GemmaService {
 
   static bool get isDownloading => download.value.running;
 
-  /// Start downloading the model with `dio` (real byte-level progress →
-  /// speed/size/ETA). Runs independently of the UI and publishes progress to
-  /// [download]. Sends a HuggingFace bearer token when given (gated models).
-  /// Fire-and-forget: call it, then watch [download].
+  /// Start a RESUMABLE, auto-retrying model download. If the connection drops
+  /// mid-file (common on big files / flaky networks), it reconnects and resumes
+  /// from the bytes already saved using an HTTP Range request, instead of
+  /// failing or restarting. Publishes progress to [download]. Fire-and-forget.
   static Future<void> startDownload(String url, {String? hfToken}) async {
     if (isDownloading) return;
+    _cancelled = false;
     final savePath = await modelFilePath();
-    _dlCancel = CancelToken();
+    final file = File(savePath);
+    final dio = Dio();
     final sw = Stopwatch()..start();
     var lastReceived = 0;
     var lastMs = 0;
+    const maxRetries = 12;
+    var attempt = 0;
+
     download.value = const GemmaDownload(running: true);
     try {
-      final dio = Dio();
-      await dio.download(
-        url,
-        savePath,
-        cancelToken: _dlCancel,
-        onReceiveProgress: (received, total) {
-          final nowMs = sw.elapsedMilliseconds;
-          var speed = download.value.speed;
-          var eta = download.value.eta;
-          if (nowMs - lastMs >= 400 || (total > 0 && received == total)) {
-            final dt = (nowMs - lastMs) / 1000.0;
-            if (dt > 0 && lastMs > 0) {
-              speed = (received - lastReceived) / dt;
-              eta = speed > 0 ? (total - received) / speed : 0;
-            }
-            lastReceived = received;
-            lastMs = nowMs;
+      while (true) {
+        var start = await file.exists() ? await file.length() : 0;
+        try {
+          final headers = <String, String>{};
+          if (hfToken != null && hfToken.trim().isNotEmpty) {
+            headers['Authorization'] = 'Bearer ${hfToken.trim()}';
           }
+          if (start > 0) headers['Range'] = 'bytes=$start-';
+
+          final resp = await dio.get<ResponseBody>(
+            url,
+            options: Options(
+              responseType: ResponseType.stream,
+              followRedirects: true,
+              maxRedirects: 5,
+              receiveTimeout: Duration.zero,
+              headers: headers,
+              validateStatus: (s) => s != null && s < 400,
+            ),
+          );
+
+          // If we asked to resume but the server sent the whole file (200, not
+          // 206), start over from scratch so we don't corrupt the file.
+          var received = start;
+          var mode = FileMode.append;
+          if (start > 0 && resp.statusCode == 200) {
+            start = 0;
+            received = 0;
+            mode = FileMode.write;
+          }
+
+          // Total size: from Content-Range (bytes s-e/TOTAL) or Content-Length.
+          var total = 0;
+          final cr = resp.headers.value('content-range');
+          if (cr != null && cr.contains('/')) {
+            total = int.tryParse(cr.split('/').last.trim()) ?? 0;
+          } else {
+            final cl = resp.headers.value('content-length');
+            total = (int.tryParse(cl ?? '0') ?? 0) + start;
+          }
+
+          final sink = file.openWrite(mode: mode);
+          try {
+            await for (final chunk in resp.data!.stream) {
+              if (_cancelled) throw const _CancelledException();
+              sink.add(chunk);
+              received += chunk.length;
+              final nowMs = sw.elapsedMilliseconds;
+              var speed = download.value.speed;
+              var eta = download.value.eta;
+              if (nowMs - lastMs >= 400) {
+                final dt = (nowMs - lastMs) / 1000.0;
+                if (dt > 0 && lastMs > 0) {
+                  speed = (received - lastReceived) / dt;
+                  eta = speed > 0 ? (total - received) / speed : 0;
+                }
+                lastReceived = received;
+                lastMs = nowMs;
+              }
+              download.value = GemmaDownload(
+                  received: received,
+                  total: total,
+                  speed: speed,
+                  eta: eta,
+                  running: true);
+            }
+          } finally {
+            await sink.flush();
+            await sink.close();
+          }
+
+          // Done when we've reached the known total (or total is unknown).
+          if (total == 0 || received >= total) break;
+          // Stream ended early without an error — loop resumes via Range.
+          throw const _IncompleteException();
+        } on _CancelledException {
+          rethrow;
+        } catch (e) {
+          if (_cancelled) rethrow;
+          attempt++;
+          if (attempt > maxRetries) rethrow;
+          // brief backoff, then resume from the bytes already on disk
           download.value = GemmaDownload(
-              received: received,
-              total: total,
-              speed: speed,
-              eta: eta,
-              running: true);
-        },
-        options: Options(
-          followRedirects: true,
-          maxRedirects: 5,
-          receiveTimeout: Duration.zero, // large file — don't time out
-          headers: (hfToken != null && hfToken.trim().isNotEmpty)
-              ? {'Authorization': 'Bearer ${hfToken.trim()}'}
-              : null,
-        ),
-      );
+            received: download.value.received,
+            total: download.value.total,
+            running: true,
+            speed: 0,
+            eta: 0,
+          );
+          await Future<void>.delayed(Duration(seconds: 2 + attempt));
+        }
+      }
       await _gemma.modelManager.setModelPath(savePath);
       download.value = GemmaDownload(
           received: download.value.received,
           total: download.value.total,
           done: true);
+    } on _CancelledException {
+      download.value = const GemmaDownload();
     } catch (e) {
-      download.value = GemmaDownload(error: e.toString());
+      download.value = GemmaDownload(
+          received: download.value.received,
+          total: download.value.total,
+          error: e.toString());
     }
   }
 
-  /// Cancel an in-flight download.
+  /// Cancel an in-flight download (keeps the partial file so it can resume).
   static void cancelDownload() {
-    _dlCancel?.cancel('cancelled by user');
-    download.value = const GemmaDownload();
+    _cancelled = true;
+  }
+
+  /// Delete any partially/fully downloaded model file (start fresh).
+  static Future<void> deleteModelFile() async {
+    final f = File(await modelFilePath());
+    if (await f.exists()) await f.delete();
   }
 
   /// True if the model file has already been downloaded to app storage.
@@ -191,4 +264,12 @@ class GemmaDownload {
   });
 
   double? get fraction => total > 0 ? received / total : null;
+}
+
+class _CancelledException implements Exception {
+  const _CancelledException();
+}
+
+class _IncompleteException implements Exception {
+  const _IncompleteException();
 }
