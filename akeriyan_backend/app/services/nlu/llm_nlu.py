@@ -4,10 +4,15 @@ Fast rules ([fast_rules.py]) handle the common, zero-latency commands.
 Whatever they can't confidently classify comes here, where the local model
 maps free-form speech onto one of AKERIYAN's intents (or just chats back).
 """
+import re
+
 from app.config import settings
 from app.services.llm import ollama_service
 from app.services.memory.session import history
 from app.services.memory import store
+
+# End-of-sentence detector for chunking a streamed reply into speakable pieces.
+_SENT_END = re.compile(r'[.!?]["\')\]]?(?:\s|$)')
 
 # The menu of things AKERIYAN can do. The model must pick exactly one.
 INTENT_MENU = """
@@ -101,3 +106,44 @@ async def free_chat(text: str) -> str:
         return await ollama_service.chat(messages, temperature=0.6, max_tokens=120)
     except Exception:
         return "Sorry, I couldn't think of an answer just now."
+
+
+def _chat_messages(text: str) -> list[dict]:
+    return [
+        {"role": "system",
+         "content": f"You are Elder Wand, {settings.owner_name}'s friendly voice "
+                    f"assistant. Reply in ONE or TWO short spoken sentences — "
+                    f"concise and natural. No lists, no markdown."
+                    + store.facts_context()},
+        *history.as_messages(),
+        {"role": "user", "content": text},
+    ]
+
+
+async def free_chat_stream(text: str):
+    """Stream the conversational reply as complete SENTENCES, so the caller can
+    synthesise + play each one the moment it's ready (Phase-2 streaming TTS)."""
+    if not await ollama_service.is_available():
+        yield "My AI brain is offline right now. Start Ollama on the PC and I'll be much smarter."
+        return
+    buf = ""
+    try:
+        async for tok in ollama_service.chat_stream(
+                _chat_messages(text), temperature=0.6, max_tokens=120):
+            buf += tok
+            # Flush every complete sentence sitting in the buffer.
+            while True:
+                m = _SENT_END.search(buf)
+                if not m:
+                    break
+                cut = m.end()
+                sent = buf[:cut].strip()
+                buf = buf[cut:]
+                if sent:
+                    yield sent
+    except Exception:
+        if not buf.strip():
+            yield "Sorry, I couldn't think of an answer just now."
+            return
+    if buf.strip():
+        yield buf.strip()

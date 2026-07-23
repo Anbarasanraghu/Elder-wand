@@ -61,6 +61,37 @@ async def chat(messages: list[dict], *, json_mode: bool = False,
     return (data.get("message", {}).get("content") or "").strip()
 
 
+async def chat_stream(messages: list[dict], *, temperature: float = 0.4,
+                      max_tokens: int | None = None):
+    """Async-generator version of chat(): yields text deltas as the model
+    produces them, so callers can start speaking the first sentence early."""
+    options = {"temperature": temperature, "num_ctx": 4096}
+    if max_tokens:
+        options["num_predict"] = max_tokens
+    payload = {
+        "model": settings.ollama_model,
+        "messages": messages,
+        "stream": True,
+        "options": options,
+        "keep_alive": "30m",
+    }
+    async with _client.stream("POST", f"{settings.ollama_url}/api/chat",
+                              json=payload) as r:
+        r.raise_for_status()
+        async for line in r.aiter_lines():
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+            except Exception:
+                continue
+            tok = data.get("message", {}).get("content")
+            if tok:
+                yield tok
+            if data.get("done"):
+                break
+
+
 async def warmup() -> None:
     """Preload the model into RAM so the first real request isn't a cold start.
     Fire-and-forget from app startup; failures are harmless."""
