@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'gemma_service.dart';
 
 /// Proof-of-concept screen to try the on-device Gemma brain on the real phone:
-/// download a model (with live speed/size/ETA), load it, and measure answer
-/// speed + quality.
+/// download a model (with live speed/size/ETA that survives leaving the page),
+/// load it, and measure answer speed + quality.
 class GemmaTestScreen extends StatefulWidget {
   const GemmaTestScreen({super.key});
 
@@ -22,97 +22,55 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
 
   String _status = 'Checking...';
   bool _busy = false;
-  bool _downloading = false;
   bool _ready = false;
-
-  // Download stats
-  int _received = 0;
-  int _total = 0;
-  double _speed = 0; // bytes/sec
-  double _eta = 0; // seconds
-  final _sw = Stopwatch();
-  int _lastReceived = 0;
-  int _lastMs = 0;
-
   String _answer = '';
   String _timing = '';
 
   @override
   void initState() {
     super.initState();
+    GemmaService.download.addListener(_onDownload);
     _refresh();
   }
 
+  void _onDownload() {
+    final d = GemmaService.download.value;
+    if (d.done) {
+      setState(() => _status = 'Download complete. Tap "Load model".');
+    } else if (d.error != null) {
+      setState(() => _status = d.error!.contains('cancel')
+          ? 'Download cancelled.'
+          : 'Download failed: ${d.error}\n(If the model is gated, add your '
+              'HuggingFace token and accept the license on the model page.)');
+    }
+  }
+
   Future<void> _refresh() async {
+    if (GemmaService.isDownloading) {
+      setState(() => _status = 'Download in progress...');
+      return;
+    }
     final exists = await GemmaService.modelFileExists();
     setState(() => _status = exists
         ? 'Model already downloaded. Tap "Load model".'
-        : 'No model yet. Paste your HuggingFace token and tap Download.');
+        : 'No model yet. Add your HuggingFace token and tap Download.');
   }
 
   // ---- formatters ----
   String _mb(int b) => '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
-  String _spd(double bps) => bps <= 0
-      ? '—'
-      : '${(bps / (1024 * 1024)).toStringAsFixed(2)} MB/s';
-  String _eta_(double s) {
+  String _spd(double bps) =>
+      bps <= 0 ? '—' : '${(bps / (1024 * 1024)).toStringAsFixed(2)} MB/s';
+  String _eta(double s) {
     if (s <= 0 || s.isInfinite || s.isNaN) return '—';
-    final m = (s ~/ 60), sec = (s % 60).round();
+    final m = s ~/ 60, sec = (s % 60).round();
     return m > 0 ? '${m}m ${sec}s' : '${sec}s';
   }
 
-  Future<void> _download() async {
-    setState(() {
-      _busy = true;
-      _downloading = true;
-      _received = 0;
-      _total = 0;
-      _speed = 0;
-      _eta = 0;
-      _lastReceived = 0;
-      _lastMs = 0;
-      _status = 'Connecting...';
-    });
-    _sw
-      ..reset()
-      ..start();
-    try {
-      await GemmaService.downloadModel(
-        _urlCtrl.text.trim(),
-        hfToken: _tokenCtrl.text,
-        onProgress: (received, total) {
-          final nowMs = _sw.elapsedMilliseconds;
-          // Update speed roughly every 400 ms for a stable readout.
-          if (nowMs - _lastMs >= 400 || received == total) {
-            final dt = (nowMs - _lastMs) / 1000.0;
-            if (dt > 0 && _lastMs > 0) {
-              _speed = (received - _lastReceived) / dt;
-              _eta = _speed > 0 ? (total - received) / _speed : 0;
-            }
-            _lastReceived = received;
-            _lastMs = nowMs;
-          }
-          setState(() {
-            _received = received;
-            _total = total;
-            _status = 'Downloading...';
-          });
-        },
-      );
-      setState(() => _status = 'Download complete. Tap "Load model".');
-    } catch (e) {
-      final msg = e.toString().contains('cancel')
-          ? 'Download cancelled.'
-          : 'Download failed: $e\n(If the model is gated, add your HuggingFace '
-              'token above — accept the license on the model page first.)';
-      setState(() => _status = msg);
-    } finally {
-      _sw.stop();
-      setState(() {
-        _busy = false;
-        _downloading = false;
-      });
-    }
+  void _download() {
+    // Fire-and-forget: the service owns the download, so it keeps running even
+    // if you leave this screen. We just watch GemmaService.download.
+    GemmaService.startDownload(_urlCtrl.text.trim(), hfToken: _tokenCtrl.text);
+    setState(() => _status = 'Downloading...');
   }
 
   Future<void> _loadModel() async {
@@ -165,6 +123,7 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
 
   @override
   void dispose() {
+    GemmaService.download.removeListener(_onDownload);
     _urlCtrl.dispose();
     _tokenCtrl.dispose();
     _askCtrl.dispose();
@@ -183,7 +142,6 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pct = _total > 0 ? _received / _total : null;
     return Scaffold(
       appBar: AppBar(title: const Text('On-device Gemma (POC)')),
       body: ListView(
@@ -200,8 +158,8 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text('Download model',
-                      style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _tokenCtrl,
@@ -226,47 +184,61 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // live progress
-                  if (_downloading || _received > 0) ...[
-                    LinearProgressIndicator(value: pct),
-                    const SizedBox(height: 4),
-                    Text(
-                      pct != null
-                          ? '${(pct * 100).toStringAsFixed(1)}%'
-                          : 'starting...',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _stat('Downloaded',
-                            '${_mb(_received)}${_total > 0 ? ' / ${_mb(_total)}' : ''}'),
-                        _stat('Speed', _spd(_speed)),
-                        _stat('ETA', _eta_(_eta)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
+                  // live progress — driven by the service, survives navigation
+                  ValueListenableBuilder<GemmaDownload>(
+                    valueListenable: GemmaService.download,
+                    builder: (_, d, _) {
+                      if (!d.running && d.received == 0) {
+                        return const SizedBox.shrink();
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          LinearProgressIndicator(value: d.fraction),
+                          const SizedBox(height: 4),
+                          Text(
+                            d.fraction != null
+                                ? '${(d.fraction! * 100).toStringAsFixed(1)}%'
+                                : 'starting...',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _stat('Downloaded',
+                                  '${_mb(d.received)}${d.total > 0 ? ' / ${_mb(d.total)}' : ''}'),
+                              _stat('Speed', _spd(d.speed)),
+                              _stat('ETA', _eta(d.eta)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      );
+                    },
+                  ),
 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _busy ? null : _download,
-                          icon: const Icon(Icons.download),
-                          label: const Text('Download'),
+                  ValueListenableBuilder<GemmaDownload>(
+                    valueListenable: GemmaService.download,
+                    builder: (_, d, _) => Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: (d.running || _busy) ? null : _download,
+                            icon: const Icon(Icons.download),
+                            label: Text(d.running ? 'Downloading...' : 'Download'),
+                          ),
                         ),
-                      ),
-                      if (_downloading) ...[
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                          onPressed: GemmaService.cancelDownload,
-                          child: const Text('Cancel'),
-                        ),
+                        if (d.running) ...[
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                            onPressed: GemmaService.cancelDownload,
+                            child: const Text('Cancel'),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),

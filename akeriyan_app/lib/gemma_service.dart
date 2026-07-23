@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
@@ -46,38 +47,75 @@ class GemmaService {
 
   static CancelToken? _dlCancel;
 
-  /// Download the model with `dio` so we get real byte-level progress (received,
-  /// total) for a proper UI — speed, size, ETA. Sends a HuggingFace bearer token
-  /// when given, so gated Gemma models download directly. Saves to app storage
-  /// and registers it with flutter_gemma. Returns the saved path.
-  static Future<String> downloadModel(
-    String url, {
-    String? hfToken,
-    required void Function(int received, int total) onProgress,
-  }) async {
+  /// Live download state, owned by the service (not any screen). The download
+  /// keeps running when you leave the page; reopening just re-reads this.
+  static final ValueNotifier<GemmaDownload> download =
+      ValueNotifier<GemmaDownload>(const GemmaDownload());
+
+  static bool get isDownloading => download.value.running;
+
+  /// Start downloading the model with `dio` (real byte-level progress →
+  /// speed/size/ETA). Runs independently of the UI and publishes progress to
+  /// [download]. Sends a HuggingFace bearer token when given (gated models).
+  /// Fire-and-forget: call it, then watch [download].
+  static Future<void> startDownload(String url, {String? hfToken}) async {
+    if (isDownloading) return;
     final savePath = await modelFilePath();
     _dlCancel = CancelToken();
-    final dio = Dio();
-    await dio.download(
-      url,
-      savePath,
-      cancelToken: _dlCancel,
-      onReceiveProgress: onProgress,
-      options: Options(
-        followRedirects: true,
-        maxRedirects: 5,
-        receiveTimeout: Duration.zero, // large file — don't time out
-        headers: (hfToken != null && hfToken.trim().isNotEmpty)
-            ? {'Authorization': 'Bearer ${hfToken.trim()}'}
-            : null,
-      ),
-    );
-    await _gemma.modelManager.setModelPath(savePath);
-    return savePath;
+    final sw = Stopwatch()..start();
+    var lastReceived = 0;
+    var lastMs = 0;
+    download.value = const GemmaDownload(running: true);
+    try {
+      final dio = Dio();
+      await dio.download(
+        url,
+        savePath,
+        cancelToken: _dlCancel,
+        onReceiveProgress: (received, total) {
+          final nowMs = sw.elapsedMilliseconds;
+          var speed = download.value.speed;
+          var eta = download.value.eta;
+          if (nowMs - lastMs >= 400 || (total > 0 && received == total)) {
+            final dt = (nowMs - lastMs) / 1000.0;
+            if (dt > 0 && lastMs > 0) {
+              speed = (received - lastReceived) / dt;
+              eta = speed > 0 ? (total - received) / speed : 0;
+            }
+            lastReceived = received;
+            lastMs = nowMs;
+          }
+          download.value = GemmaDownload(
+              received: received,
+              total: total,
+              speed: speed,
+              eta: eta,
+              running: true);
+        },
+        options: Options(
+          followRedirects: true,
+          maxRedirects: 5,
+          receiveTimeout: Duration.zero, // large file — don't time out
+          headers: (hfToken != null && hfToken.trim().isNotEmpty)
+              ? {'Authorization': 'Bearer ${hfToken.trim()}'}
+              : null,
+        ),
+      );
+      await _gemma.modelManager.setModelPath(savePath);
+      download.value = GemmaDownload(
+          received: download.value.received,
+          total: download.value.total,
+          done: true);
+    } catch (e) {
+      download.value = GemmaDownload(error: e.toString());
+    }
   }
 
   /// Cancel an in-flight download.
-  static void cancelDownload() => _dlCancel?.cancel('cancelled by user');
+  static void cancelDownload() {
+    _dlCancel?.cancel('cancelled by user');
+    download.value = const GemmaDownload();
+  }
 
   /// True if the model file has already been downloaded to app storage.
   static Future<bool> modelFileExists() async =>
@@ -129,4 +167,28 @@ class GemmaService {
     _model = null;
     _chat = null;
   }
+}
+
+/// Immutable snapshot of the current download, published via
+/// [GemmaService.download] so any screen can reflect the live state.
+class GemmaDownload {
+  final int received;
+  final int total;
+  final double speed; // bytes/sec
+  final double eta; // seconds remaining
+  final bool running;
+  final bool done;
+  final String? error;
+
+  const GemmaDownload({
+    this.received = 0,
+    this.total = 0,
+    this.speed = 0,
+    this.eta = 0,
+    this.running = false,
+    this.done = false,
+    this.error,
+  });
+
+  double? get fraction => total > 0 ? received / total : null;
 }
