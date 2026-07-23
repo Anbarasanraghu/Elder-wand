@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma/core/chat.dart';
 import 'package:flutter_gemma/core/model.dart';
@@ -35,9 +38,50 @@ class GemmaService {
 
   static Future<bool> isInstalled() => _gemma.modelManager.isModelInstalled;
 
-  /// Download a model from a (public) URL, yielding 0..100 progress.
-  static Stream<int> downloadFromUrl(String url) =>
-      _gemma.modelManager.downloadModelFromNetworkWithProgress(url);
+  /// Where the model file lives once downloaded.
+  static Future<String> modelFilePath() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return '${dir.path}/gemma_model.task';
+  }
+
+  static CancelToken? _dlCancel;
+
+  /// Download the model with `dio` so we get real byte-level progress (received,
+  /// total) for a proper UI — speed, size, ETA. Sends a HuggingFace bearer token
+  /// when given, so gated Gemma models download directly. Saves to app storage
+  /// and registers it with flutter_gemma. Returns the saved path.
+  static Future<String> downloadModel(
+    String url, {
+    String? hfToken,
+    required void Function(int received, int total) onProgress,
+  }) async {
+    final savePath = await modelFilePath();
+    _dlCancel = CancelToken();
+    final dio = Dio();
+    await dio.download(
+      url,
+      savePath,
+      cancelToken: _dlCancel,
+      onReceiveProgress: onProgress,
+      options: Options(
+        followRedirects: true,
+        maxRedirects: 5,
+        receiveTimeout: Duration.zero, // large file — don't time out
+        headers: (hfToken != null && hfToken.trim().isNotEmpty)
+            ? {'Authorization': 'Bearer ${hfToken.trim()}'}
+            : null,
+      ),
+    );
+    await _gemma.modelManager.setModelPath(savePath);
+    return savePath;
+  }
+
+  /// Cancel an in-flight download.
+  static void cancelDownload() => _dlCancel?.cancel('cancelled by user');
+
+  /// True if the model file has already been downloaded to app storage.
+  static Future<bool> modelFileExists() async =>
+      File(await modelFilePath()).exists();
 
   /// Register an already-on-device .task file (the reliable path for gated
   /// models). No copy/download — the plugin reads it in place.
@@ -48,6 +92,13 @@ class GemmaService {
   /// installed (via download or loadFromPath). GPU-accelerated when available.
   static Future<void> load({int maxTokens = 1024}) async {
     await close();
+    // Make sure the on-disk model is registered (e.g. after an app restart).
+    if (!await _gemma.modelManager.isModelInstalled) {
+      final p = await modelFilePath();
+      if (await File(p).exists()) {
+        await _gemma.modelManager.setModelPath(p);
+      }
+    }
     _model = await _gemma.createModel(
       modelType: ModelType.gemmaIt,
       maxTokens: maxTokens,
