@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_tts/flutter_tts.dart';
 
 import 'gemma_service.dart';
 
@@ -20,6 +22,12 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
   final _askCtrl =
       TextEditingController(text: 'Tell me a fun fact about space.');
 
+  // On-device speech-to-text + text-to-speech (no PC).
+  final stt.SpeechToText _stt = stt.SpeechToText();
+  final FlutterTts _tts = FlutterTts();
+  bool _sttReady = false;
+  bool _listening = false;
+
   String _status = 'Checking...';
   bool _busy = false;
   bool _ready = false;
@@ -30,7 +38,49 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
   void initState() {
     super.initState();
     GemmaService.download.addListener(_onDownload);
+    _tts.setLanguage('en-US');
+    _tts.awaitSpeakCompletion(true);
     _refresh();
+  }
+
+  /// Fully on-device voice turn: mic -> speech_to_text -> Gemma -> flutter_tts.
+  /// No backend, no network, no PC.
+  Future<void> _talk() async {
+    if (!_ready) {
+      setState(() => _status = 'Load the model first.');
+      return;
+    }
+    if (_listening) {
+      await _stt.stop();
+      setState(() => _listening = false);
+      return;
+    }
+    _sttReady = _sttReady || await _stt.initialize();
+    if (!_sttReady) {
+      setState(() => _status = 'Speech recognition unavailable (mic permission?).');
+      return;
+    }
+    setState(() {
+      _listening = true;
+      _answer = '';
+      _status = 'Listening...';
+    });
+    await _stt.listen(
+      onResult: (r) {
+        setState(() => _askCtrl.text = r.recognizedWords);
+        if (r.finalResult) {
+          setState(() {
+            _listening = false;
+            _status = 'Thinking...';
+          });
+          if (r.recognizedWords.trim().isNotEmpty) _ask();
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _onDownload() {
@@ -126,9 +176,15 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
       }
       final totalMs = DateTime.now().difference(t0).inMilliseconds;
       final tps = tokens / (totalMs / 1000);
-      setState(() => _timing =
-          'first token: ${((firstMs ?? 0) / 1000).toStringAsFixed(2)}s  •  '
-          '$tokens tokens  •  ${tps.toStringAsFixed(1)} tok/s');
+      setState(() {
+        _status = 'Speaking...';
+        _timing =
+            'first token: ${((firstMs ?? 0) / 1000).toStringAsFixed(2)}s  •  '
+            '$tokens tokens  •  ${tps.toStringAsFixed(1)} tok/s';
+      });
+      // Speak the reply on-device (flutter_tts) — the last PC-free piece.
+      if (_answer.trim().isNotEmpty) await _tts.speak(_answer.trim());
+      setState(() => _status = 'Done.');
     } catch (e) {
       setState(() => _answer = 'Error: $e');
     } finally {
@@ -139,6 +195,8 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
   @override
   void dispose() {
     GemmaService.download.removeListener(_onDownload);
+    _stt.stop();
+    _tts.stop();
     _urlCtrl.dispose();
     _tokenCtrl.dispose();
     _askCtrl.dispose();
@@ -274,10 +332,32 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: (_busy || !_ready) ? null : _ask,
-            icon: const Icon(Icons.send),
-            label: const Text('Ask on-device'),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: (_busy || !_ready) ? null : _ask,
+                  icon: const Icon(Icons.send),
+                  label: const Text('Ask (type)'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: !_ready ? null : _talk,
+                  style: FilledButton.styleFrom(
+                      backgroundColor:
+                          _listening ? Colors.red : null),
+                  icon: Icon(_listening ? Icons.stop : Icons.mic),
+                  label: Text(_listening ? 'Listening' : 'Talk'),
+                ),
+              ),
+            ],
+          ),
+          const Text(
+            'Talk = fully on-device: your voice → text → Gemma → spoken reply. '
+            'No PC, no internet.',
+            style: TextStyle(fontSize: 11, color: Colors.grey),
           ),
           const SizedBox(height: 16),
           if (_answer.isNotEmpty)
