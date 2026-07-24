@@ -32,6 +32,7 @@ import 'history_store.dart';
 import 'gemma_test_screen.dart';
 import 'gemma_service.dart';
 import 'voice_screen.dart';
+import 'on_device_skills.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'history_screen.dart';
 import 'trading_screen.dart';
@@ -480,11 +481,30 @@ class _AssistantScreenState extends State<AssistantScreen>
       _response = '';
     });
     try {
-      // On-device brain first: plain conversation answered on the phone.
+      // On-device SKILLS first: weather / news / web search via free public
+      // APIs — answered entirely on the phone, no backend needed.
+      String? skill;
+      if (lang == 'en') {
+        final pos = await LocationService.current();
+        skill = await OnDeviceSkills.respond(text,
+            lat: pos?.latitude, lon: pos?.longitude);
+      }
+      if (skill != null) {
+        setState(() {
+          _response = skill!;
+          _lastOnDevice = true;
+        });
+        HistoryStore.add(youSaid: text, akeriyanSaid: skill, intent: 'skill');
+        spoke = true;
+        await TtsService.speakLocal(skill);
+        return; // handled on-device — finally still runs the follow-up
+      }
+
+      // On-device brain: plain conversation answered on the phone.
       final handledOnDevice = await _tryGemmaChat(text);
       if (handledOnDevice) spoke = true;
 
-      // Backend path — actions/skills, or when Gemma isn't loaded.
+      // Backend path — other actions, or when Gemma isn't loaded.
       if (!handledOnDevice) {
         _lastOnDevice = false;
         Map<String, dynamic>? nluData;
