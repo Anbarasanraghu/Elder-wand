@@ -40,6 +40,8 @@ import 'api_registry_screen.dart';
 import 'memory_store.dart';
 import 'memory_screen.dart';
 import 'memory_extractor.dart';
+import 'proactive_service.dart';
+import 'proactive_screen.dart';
 import 'personal_store.dart';
 import 'personal_screen.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -96,6 +98,7 @@ class _AssistantScreenState extends State<AssistantScreen>
     AkeriyanForegroundService.start().whenComplete(_startWakeWord);
     NotificationReader.start();
     AlertsPoller.start(widget.backendUrl, widget.token);
+    ProactiveService.start(); // daily briefing + low-battery nudges
   }
 
   @override
@@ -1323,6 +1326,8 @@ class _AssistantScreenState extends State<AssistantScreen>
           const ApiRegistryScreen(), true),
       ('About You', 'What I remember', Icons.psychology_outlined,
           const MemoryScreen(), true),
+      ('Proactive', 'Briefing & alerts', Icons.notifications_active_outlined,
+          const ProactiveScreen(), false),
       ('Memory', 'Past chats', Icons.history, const HistoryScreen(), false),
       ('Meeting', 'Record & sum up', Icons.mic_none,
           MeetingScreen(backendUrl: widget.backendUrl, token: widget.token), false),

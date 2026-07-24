@@ -35,7 +35,7 @@ class NotificationService {
       id: id,
       title: title,
       body: body,
-      notificationDetails: const NotificationDetails(
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           'akeriyan_alerts',
           'Alerts & Briefings',
@@ -43,6 +43,7 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
           playSound: true,
+          styleInformation: BigTextStyleInformation(body), // expand long text
         ),
       ),
     );
