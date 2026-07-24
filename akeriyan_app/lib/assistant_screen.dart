@@ -34,6 +34,7 @@ import 'gemma_service.dart';
 import 'voice_screen.dart';
 import 'on_device_skills.dart';
 import 'on_device_nlu.dart';
+import 'personal_store.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'history_screen.dart';
 import 'trading_screen.dart';
@@ -502,9 +503,14 @@ class _AssistantScreenState extends State<AssistantScreen>
       case 'smalltalk':
         break; // time / greeting — speak already set
       default:
-        // Device actions: reminder, timer, flashlight, open app, call,
-        // whatsapp, notifications — executed on the phone.
-        speak = await _handleIntent(intent, slots, speak);
+        if (PersonalStore.handles(intent)) {
+          // to-do / notes / journal / habits / expenses / countdown (local).
+          speak = await PersonalStore.handle(intent, slots);
+        } else {
+          // Device actions: reminder, timer, flashlight, open app, call,
+          // whatsapp, notifications — executed on the phone.
+          speak = await _handleIntent(intent, slots, speak);
+        }
     }
     if (mounted) setState(() => _response = speak);
     HistoryStore.add(youSaid: text, akeriyanSaid: speak, intent: intent);

@@ -91,6 +91,108 @@ class OnDeviceNlu {
       };
     }
 
+    // ================= PERSONAL DATA (all on-device) =================
+    // to-do list
+    final todoAdd = RegExp(
+            r'^(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:my\s+)?(?:to-?do list|todo list|to do list|list|tasks?)$')
+        .firstMatch(t);
+    if (todoAdd != null) {
+      return {'intent': 'todo_add', 'slots': {'task': todoAdd.group(1)!.trim()}, 'speak': ''};
+    }
+    if (RegExp(r"\b(what'?s on my|read my|show my|check my)\b.*\b(list|to-?dos?|tasks?)\b")
+            .hasMatch(t) ||
+        {'my list', 'my tasks', 'my to-do list', 'my todo list', 'my to do list'}.contains(t)) {
+      return {'intent': 'todo_list', 'slots': {}, 'speak': ''};
+    }
+    if (RegExp(r'\bclear (my )?(list|to-?dos?|tasks?)\b').hasMatch(t)) {
+      return {'intent': 'todo_clear', 'slots': {}, 'speak': ''};
+    }
+    final todoDone = RegExp(r'^mark\s+(.+?)\s+(?:as\s+)?done$').firstMatch(t) ??
+        RegExp(r'^(?:done with|completed?|finished|cross off|remove)\s+(.+?)(?:\s+from (?:my )?list)?$')
+            .firstMatch(t);
+    if (todoDone != null) {
+      return {'intent': 'todo_done', 'slots': {'task': todoDone.group(1)!.trim()}, 'speak': ''};
+    }
+
+    // notes
+    final noteAdd = RegExp(
+            r'^(?:take a note|make a note|note that|note down|new note|note)[:\s]+(.+)$')
+        .firstMatch(t);
+    if (noteAdd != null) {
+      return {'intent': 'note_add', 'slots': {'text': noteAdd.group(1)!.trim()}, 'speak': ''};
+    }
+    if (RegExp(r'\b(read|show|what are) my notes\b').hasMatch(t) || t == 'my notes') {
+      return {'intent': 'note_list', 'slots': {}, 'speak': ''};
+    }
+    if (RegExp(r'\bclear (my )?notes\b').hasMatch(t)) {
+      return {'intent': 'note_clear', 'slots': {}, 'speak': ''};
+    }
+
+    // journal
+    final jAdd = RegExp(r'^(?:journal|diary|dear diary|add to (?:my )?journal)[:\s]+(.+)$')
+        .firstMatch(t);
+    if (jAdd != null) {
+      return {'intent': 'journal_add', 'slots': {'text': jAdd.group(1)!.trim()}, 'speak': ''};
+    }
+    if (RegExp(r'\b(read|show)\b.*\b(journal|diary)\b').hasMatch(t) || t == 'my journal') {
+      return {'intent': 'journal_read', 'slots': {}, 'speak': ''};
+    }
+
+    // habits
+    final hLog = RegExp(r'^(?:log|track|check off|did)\s+(?:my\s+)?(.+?)\s+habit\b').firstMatch(t) ??
+        RegExp(r'^(?:log|track)\s+habit\s+(.+)$').firstMatch(t);
+    if (hLog != null) {
+      return {'intent': 'habit_log', 'slots': {'name': hLog.group(1)!.trim()}, 'speak': ''};
+    }
+    final hStat = RegExp(r'\b(?:my|the)\s+(.+?)\s+(?:habit|streak)\b').firstMatch(t);
+    if (hStat != null) {
+      return {'intent': 'habit_status', 'slots': {'name': hStat.group(1)!.trim()}, 'speak': ''};
+    }
+
+    // expenses
+    final exp = RegExp(
+            r'\b(?:spent|spend|paid)\s+(\d+(?:\.\d+)?)\s*(?:rupees|rs|dollars|bucks)?\s*(?:on|for)\s+(.+)$')
+        .firstMatch(t);
+    if (exp != null) {
+      return {
+        'intent': 'expense_add',
+        'slots': {'amount': double.parse(exp.group(1)!), 'category': exp.group(2)!.trim()},
+        'speak': '',
+      };
+    }
+    if (RegExp(r'\b(how much (did|have) i spent?|my (expenses|spending)|total (expenses|spending))\b')
+        .hasMatch(t)) {
+      return {
+        'intent': 'expense_total',
+        'slots': {'period': t.contains('week') ? 'week' : 'all'},
+        'speak': '',
+      };
+    }
+
+    // countdown events
+    final evSet = RegExp(r'^(?:my )?(.+?)\s+is on\s+(.+)$').firstMatch(t);
+    if (evSet != null) {
+      final d = _parseDate(evSet.group(2)!);
+      if (d != null) {
+        return {
+          'intent': 'event_set',
+          'slots': {'name': evSet.group(1)!.trim(), 'date': d.toIso8601String()},
+          'speak': '',
+        };
+      }
+    }
+    final dUntil = RegExp(r'\bhow many days (?:until|till|to)\s+(.+)$').firstMatch(t);
+    if (dUntil != null) {
+      final name = dUntil.group(1)!.trim();
+      final d = _parseDate(name);
+      return {
+        'intent': 'days_until',
+        'slots': {'name': name, 'date': d?.toIso8601String()},
+        'speak': '',
+      };
+    }
+    // =================================================================
+
     // ---- weather ----
     if (RegExp(r'\b(weather|temperature|forecast|how (hot|cold|warm)|will it rain|raining|humidity)\b')
         .hasMatch(t)) {
@@ -237,6 +339,35 @@ class OnDeviceNlu {
     return DateTime.now().add(unit.startsWith('min')
         ? Duration(seconds: (n * 60).round())
         : Duration(seconds: (n * 3600).round()));
+  }
+
+  static const _months = {
+    'january': 1, 'jan': 1, 'february': 2, 'feb': 2, 'march': 3, 'mar': 3,
+    'april': 4, 'apr': 4, 'may': 5, 'june': 6, 'jun': 6, 'july': 7, 'jul': 7,
+    'august': 8, 'aug': 8, 'september': 9, 'sep': 9, 'sept': 9, 'october': 10,
+    'oct': 10, 'november': 11, 'nov': 11, 'december': 12, 'dec': 12,
+  };
+
+  /// Parse "december 25", "25 december", "dec 25" → the next such date.
+  static DateTime? _parseDate(String s) {
+    final l = s.toLowerCase();
+    int? mo, day;
+    final m1 = RegExp(r'\b([a-z]+)\s+(\d{1,2})\b').firstMatch(l); // month day
+    final m2 = RegExp(r'\b(\d{1,2})\s+([a-z]+)\b').firstMatch(l); // day month
+    if (m1 != null && _months.containsKey(m1.group(1))) {
+      mo = _months[m1.group(1)];
+      day = int.tryParse(m1.group(2)!);
+    } else if (m2 != null && _months.containsKey(m2.group(2))) {
+      mo = _months[m2.group(2)];
+      day = int.tryParse(m2.group(1)!);
+    }
+    if (mo == null || day == null || day < 1 || day > 31) return null;
+    final now = DateTime.now();
+    var d = DateTime(now.year, mo, day);
+    if (d.isBefore(DateTime(now.year, now.month, now.day))) {
+      d = DateTime(now.year + 1, mo, day); // next occurrence
+    }
+    return d;
   }
 
   static int _parseSeconds(String text) {
