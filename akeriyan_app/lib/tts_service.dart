@@ -21,12 +21,74 @@ class TtsService {
   static Future<void> init(String backendUrl, String token) async {
     _backendUrl = backendUrl;
     _token = token;
+    // Fail fast to the phone voice when the PC/Piper isn't reachable.
+    _dio.options.connectTimeout = const Duration(seconds: 2);
     if (!_deviceReady) {
-      await _device.setLanguage('en-IN');
-      await _device.setSpeechRate(0.5);
+      try {
+        // Prefer Google's neural TTS engine — far more human than the defaults.
+        final engines = await _device.getEngines;
+        if (engines is List &&
+            engines.map((e) => '$e').contains('com.google.android.tts')) {
+          await _device.setEngine('com.google.android.tts');
+        }
+      } catch (_) {}
+      await _device.setLanguage('en-US');
+      await _pickNaturalVoice();
+      await _device.setSpeechRate(0.52); // natural pace
+      await _device.setPitch(1.0);
       await _device.awaitSpeakCompletion(true);
       _deviceReady = true;
     }
+  }
+
+  /// Pick the most natural available English voice. Google's neural voices are
+  /// usually the "network"/"neural" ones and sound close to human; plain
+  /// "local" voices are the robotic fallbacks.
+  static Future<void> _pickNaturalVoice() async {
+    try {
+      final raw = await _device.getVoices;
+      if (raw is! List) return;
+      final en = <Map<String, String>>[];
+      for (final v in raw) {
+        if (v is Map) {
+          final locale = '${v['locale'] ?? ''}';
+          if (locale.toLowerCase().startsWith('en')) {
+            en.add({'name': '${v['name'] ?? ''}', 'locale': locale});
+          }
+        }
+      }
+      if (en.isEmpty) return;
+      int score(Map<String, String> v) {
+        final n = v['name']!.toLowerCase();
+        final l = v['locale']!.toLowerCase();
+        var s = 0;
+        if (n.contains('network')) s += 5; // Google neural (best)
+        if (n.contains('neural')) s += 5;
+        if (l.startsWith('en-us')) s += 2;
+        if (l.startsWith('en-gb')) s += 1;
+        if (n.contains('-local')) s -= 2; // low-quality local voices
+        return s;
+      }
+      en.sort((a, b) => score(b).compareTo(score(a)));
+      await _device.setVoice(en.first);
+    } catch (_) {}
+  }
+
+  /// Speak with the phone's neural voice directly — no PC/Piper round-trip.
+  /// Used for on-device replies so there's zero backend latency.
+  static Future<void> speakLocal(String text, {String lang = 'en'}) async {
+    text = text.trim();
+    if (text.isEmpty) return;
+    try {
+      await _player.stop();
+      if (lang != 'en') {
+        await _device.setLanguage('$lang-IN');
+        await _device.speak(text);
+        await _device.setLanguage('en-US');
+      } else {
+        await _device.speak(text);
+      }
+    } catch (_) {}
   }
 
   static Future<void> speak(String text, {String lang = 'en'}) async {

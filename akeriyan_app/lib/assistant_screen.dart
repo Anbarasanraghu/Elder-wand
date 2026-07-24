@@ -546,7 +546,7 @@ class _AssistantScreenState extends State<AssistantScreen>
       }
       setState(() => _response = reply);
       HistoryStore.add(youSaid: text, akeriyanSaid: reply, intent: 'chat');
-      await TtsService.speak(reply); // Piper if PC on, device TTS if off
+      await TtsService.speakLocal(reply); // phone neural voice, no PC wait
       return true;
     } catch (_) {
       setState(() => _lastOnDevice = false);
