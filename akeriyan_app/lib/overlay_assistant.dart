@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
@@ -29,8 +30,14 @@ class OverlayAssistant {
         await FlutterOverlayWindow.closeOverlay();
       }
     } catch (_) {}
+    // The plugin's height is in PHYSICAL pixels, but Flutter lays out in
+    // LOGICAL pixels — so convert (≈340 logical px tall for the glass card),
+    // otherwise the card overflows on high-density screens.
+    final dpr = ui.PlatformDispatcher.instance.views.isNotEmpty
+        ? ui.PlatformDispatcher.instance.views.first.devicePixelRatio
+        : 3.0;
     await FlutterOverlayWindow.showOverlay(
-      height: 340, // room for the glass card + its floating corner buttons
+      height: (340 * dpr).round(),
       width: WindowSize.matchParent,
       alignment: OverlayAlignment.bottomCenter, // sit at the BOTTOM
       flag: OverlayFlag.defaultFlag, // focusable so it can show over apps

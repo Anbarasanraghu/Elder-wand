@@ -181,7 +181,7 @@ class _OverlayAppState extends State<OverlayApp>
 
   Widget _bubble(String text) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 170),
+      constraints: const BoxConstraints(maxHeight: 150),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.20),
