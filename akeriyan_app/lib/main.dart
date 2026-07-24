@@ -6,10 +6,19 @@ import 'foreground_service.dart';
 import 'history_store.dart';
 import 'api_registry.dart';
 import 'memory_store.dart';
+import 'overlay_app.dart';
 import 'theme.dart';
 import 'widgets/assistant_orb.dart';
 import 'widgets/gradient_border.dart';
 import 'gemma_service.dart';
+
+/// Entry point for the floating overlay's own isolate (found by
+/// flutter_overlay_window). Renders the compact "assistant over other apps"
+/// panel; the main app pushes state into it via shareData.
+@pragma('vm:entry-point')
+void overlayMain() {
+  runApp(const OverlayApp());
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

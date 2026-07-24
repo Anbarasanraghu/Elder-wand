@@ -173,6 +173,13 @@ class OnDeviceNlu {
     // ====================================================================
 
     // ================= SYSTEM ACTIONS (Batch 4) =================
+    // open the full app ("open our space") — from the floating overlay
+    if (RegExp(r'\bopen (our space|the app|the assistant|elder wand|you|yourself|full app)\b')
+            .hasMatch(t) ||
+        t == 'our space' ||
+        t == 'open up') {
+      return {'intent': 'open_self', 'slots': {}, 'speak': ''};
+    }
     // alarm: "set an alarm for 7am", "wake me up at 6:30"
     if (RegExp(r'\balarm\b').hasMatch(t) ||
         RegExp(r'\bwake me( up)?\b').hasMatch(t)) {

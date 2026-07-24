@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'tts_service.dart';
 import 'notification_service.dart';
@@ -43,6 +44,8 @@ import 'memory_extractor.dart';
 import 'proactive_service.dart';
 import 'proactive_screen.dart';
 import 'scan_screen.dart';
+import 'overlay_assistant.dart';
+import 'overlay_screen.dart';
 import 'personal_store.dart';
 import 'personal_screen.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -79,6 +82,8 @@ class _AssistantScreenState extends State<AssistantScreen>
   bool _sttReady = false;
 
   bool _wakeActive = false;
+  bool _foreground = true; // is the app currently on-screen?
+  bool _overlayActive = false; // is the floating panel showing this turn?
   Timer? _autoStop;
   String _response = '';
   bool _recording = false;
@@ -108,11 +113,22 @@ class _AssistantScreenState extends State<AssistantScreen>
     // "Hey Google"). The foreground service keeps the listener alive in the
     // background, so we do NOT stop it on pause. On resume we just make sure
     // it's still listening (restart if the OS killed it).
+    _foreground = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
+      // Back in the app — the floating panel is no longer needed.
+      if (_overlayActive) {
+        _overlayActive = false;
+        OverlayAssistant.close();
+      }
       if (!_recording && !_thinking && !_wake.listening) {
         _startWakeWord();
       }
     }
+  }
+
+  /// Push the current turn's state to the floating overlay, if it's showing.
+  void _overlayMirror(String status, {String body = ''}) {
+    if (_overlayActive) OverlayAssistant.update(status: status, body: body);
   }
 
   /// If an on-device model has been downloaded, load it into memory at startup
@@ -165,6 +181,17 @@ class _AssistantScreenState extends State<AssistantScreen>
     // Release the mic from the wake listener, then record the command.
     await _wake.stop();
     setState(() => _wakeActive = false);
+    // If the app isn't on-screen, pop the floating panel over the current app
+    // (like Google) — needs the one-time "draw over other apps" permission.
+    if (!_foreground) {
+      final p = await SharedPreferences.getInstance();
+      if ((p.getBool('overlay_on') ?? true) &&
+          await OverlayAssistant.hasPermission()) {
+        await OverlayAssistant.show();
+        _overlayActive = true;
+        _overlayMirror('Listening…');
+      }
+    }
     SystemSound.play(SystemSoundType.click); // earcon: "I'm awake"
     await TtsService.speakLocal(_wakeReply);
     await Future.delayed(const Duration(milliseconds: 600));
@@ -452,6 +479,7 @@ class _AssistantScreenState extends State<AssistantScreen>
         _heard = 'Listening… say it now';
       });
     }
+    _overlayMirror('Listening… say it now');
 
     var lastWords = '';
     try {
@@ -462,6 +490,7 @@ class _AssistantScreenState extends State<AssistantScreen>
             setState(() => _heard =
                 lastWords.isEmpty ? 'Listening… say it now' : '"$lastWords"');
           }
+          if (lastWords.isNotEmpty) _overlayMirror('"$lastWords"');
           if (r.finalResult) finish(lastWords);
         },
         listenOptions: stt.SpeechListenOptions(
@@ -576,6 +605,10 @@ class _AssistantScreenState extends State<AssistantScreen>
       case 'memory_forget':
         MemoryStore.clear();
         speak = "Done — I've forgotten what I knew about you.";
+      case 'open_self':
+        speak = 'Opening Elder Wand.';
+        _overlayActive = false;
+        await OverlayAssistant.openApp();
       case 'scan_qr':
         speak = 'Opening the QR scanner.';
         if (mounted) {
@@ -636,6 +669,7 @@ class _AssistantScreenState extends State<AssistantScreen>
       _heard = '"$text"';
       _response = '';
     });
+    _overlayMirror('Thinking…');
     try {
       // On-device UNDERSTANDING first: everything the phone can fully handle
       // (reminders, timer, flashlight, open app, calls, weather, news,
@@ -715,6 +749,7 @@ class _AssistantScreenState extends State<AssistantScreen>
     } finally {
       _autoStop?.cancel();
       setState(() => _thinking = false);
+      if (_overlayActive) _overlayMirror('', body: _response);
       // Continuous conversation only after a spoken turn. Chip taps
       // (followUp:false) answer once and return straight to wake listening.
       if (spoke && followUp) {
@@ -1061,6 +1096,12 @@ class _AssistantScreenState extends State<AssistantScreen>
   }
 
   Future<void> _resumeWake() async {
+    // The conversation is over — dismiss the floating panel (after a short beat
+    // so the last reply stays readable), then go back to wake listening.
+    if (_overlayActive) {
+      _overlayActive = false;
+      Future.delayed(const Duration(seconds: 5), OverlayAssistant.close);
+    }
     await _wake.resume();
     if (mounted) setState(() => _wakeActive = true);
   }
@@ -1344,6 +1385,8 @@ class _AssistantScreenState extends State<AssistantScreen>
           const ProactiveScreen(), false),
       ('Scan', 'QR & text (OCR)', Icons.qr_code_scanner,
           const ScanScreen(), false),
+      ('Floating', 'Panel over apps', Icons.picture_in_picture_alt_outlined,
+          const OverlayScreen(), true),
       ('Memory', 'Past chats', Icons.history, const HistoryScreen(), false),
       ('Meeting', 'Record & sum up', Icons.mic_none,
           MeetingScreen(backendUrl: widget.backendUrl, token: widget.token), false),
