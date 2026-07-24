@@ -135,23 +135,28 @@ class GemmaService {
   }
 
   /// Load the active model into memory + open a chat. GPU-accelerated.
-  static Future<void> load({int maxTokens = 1024}) async {
+  /// A larger [maxTokens] context lets the chat remember more of the ongoing
+  /// conversation (ChatGPT-style memory) across turns in a session.
+  static Future<void> load({int maxTokens = 2048}) async {
     await close();
     _model = await FlutterGemma.getActiveModel(
       maxTokens: maxTokens,
       preferredBackend: PreferredBackend.gpu,
     );
-    // Keep replies short + capped — the single biggest on-device speed win
-    // (fewer generated tokens = far less wait), and it suits spoken answers.
+    // Concise by default (spoken replies + on-device speed), but allowed to
+    // give a short real explanation when the user asks it to explain or teach.
     _chat = await _model!.createChat(
-      temperature: 0.6,
+      temperature: 0.7,
       topK: 40,
       topP: 0.9,
-      maxOutputTokens: 120,
+      maxOutputTokens: 220,
       systemInstruction:
-          'You are Elder Wand, a friendly voice assistant. Reply in ONE or '
-          'TWO short spoken sentences — concise and natural. No lists, no '
-          'markdown.',
+          "You are Elder Wand, the user's sharp, friendly personal assistant, "
+          "in the spirit of JARVIS. You remember the ongoing conversation and "
+          "refer back to it naturally. Speak in a natural, spoken style — "
+          "usually one or two sentences, but give a clear, helpful explanation "
+          "(a few short sentences) when the user asks you to explain, teach, or "
+          "compare something. Never use markdown, bullet points, or emojis.",
     );
   }
 

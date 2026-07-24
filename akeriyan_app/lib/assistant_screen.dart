@@ -664,12 +664,28 @@ class _AssistantScreenState extends State<AssistantScreen>
       r'monitor|gold|silver|forex|routine)\b',
       caseSensitive: false);
 
+  // A question / "explain this" — the on-device brain should answer these
+  // conversationally even when they mention action words (e.g. "did you know
+  // about trading analysis" contains 'trading' but is really a question).
+  static final RegExp _knowledgeQ = RegExp(
+      r"^\s*(did you know|do you know|what(?:'s| is| are| was| does| do)|whats|"
+      r"explain|tell me|teach me|describe|show me how|how (?:do|does|can|is|are|to|much do)|"
+      r"why|when|where|who (?:is|are|was)|define|meaning of|difference between|"
+      r"compare|can you (?:explain|tell|help)|help me understand|is it true|"
+      r"should i|give me (?:tips|advice)|i want to (?:learn|understand)|"
+      r"what if|is there)\b",
+      caseSensitive: false);
+
   /// If the on-device Gemma model is loaded and this is plain conversation
   /// (not an action), answer it entirely on the phone (LLM) and speak the
   /// reply. Returns true if handled on-device; false to fall back to the
   /// backend (actions, or Gemma not loaded, or any error).
   Future<bool> _tryGemmaChat(String text) async {
-    if (!GemmaService.isLoaded || _actionHint.hasMatch(text)) return false;
+    if (!GemmaService.isLoaded) return false;
+    // Route to the backend only for genuine action commands — but let real
+    // questions through to the on-device brain even if they mention an
+    // action word ("explain support and resistance", "what is a stop loss").
+    if (_actionHint.hasMatch(text) && !_knowledgeQ.hasMatch(text)) return false;
     try {
       final sb = StringBuffer();
       setState(() {
