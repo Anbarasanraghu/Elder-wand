@@ -35,6 +35,7 @@ import 'voice_screen.dart';
 import 'on_device_skills.dart';
 import 'on_device_nlu.dart';
 import 'personal_store.dart';
+import 'personal_screen.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'history_screen.dart';
 import 'trading_screen.dart';
@@ -1029,6 +1030,8 @@ class _AssistantScreenState extends State<AssistantScreen>
                   _go(const GemmaTestScreen());
                 case 11:
                   _go(const VoiceScreen());
+                case 12:
+                  _go(const PersonalScreen());
               }
             },
             itemBuilder: (_) => const [
@@ -1062,6 +1065,9 @@ class _AssistantScreenState extends State<AssistantScreen>
               PopupMenuItem(
                   value: 11,
                   child: _MenuRow(Icons.record_voice_over, 'Voice')),
+              PopupMenuItem(
+                  value: 12,
+                  child: _MenuRow(Icons.dashboard_customize, 'My data')),
             ],
           ),
           const SizedBox(width: 6),
@@ -1188,6 +1194,8 @@ class _AssistantScreenState extends State<AssistantScreen>
 
   Widget _deckGrid() {
     final features = <(String, String, IconData, Widget, bool)>[
+      ('My Data', 'To-do, notes, habits…', Icons.dashboard_customize,
+          const PersonalScreen(), true),
       ('Vision', 'Camera + ask', Icons.center_focus_strong,
           VisionScreen(backendUrl: widget.backendUrl, token: widget.token), true),
       ('Markets', 'Charts & trades', Icons.candlestick_chart,

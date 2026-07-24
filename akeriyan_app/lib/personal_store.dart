@@ -26,6 +26,32 @@ class PersonalStore {
   static Future<void> _save(String k, List<dynamic> v) async =>
       (await SharedPreferences.getInstance()).setString(k, jsonEncode(v));
 
+  // ---- read/edit access for the viewer screen ----
+  static const kTodo = _todo, kNotes = _notes, kJournal = _journal,
+      kHabits = _habits, kExpenses = _expenses, kEvents = _events;
+
+  static Future<List<Map<String, dynamic>>> items(String key) async =>
+      (await _list(key)).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+
+  static Future<void> removeItem(String key, int i) async {
+    final l = await _list(key);
+    if (i >= 0 && i < l.length) {
+      l.removeAt(i);
+      await _save(key, l);
+    }
+  }
+
+  static Future<void> toggleTodo(int i) async {
+    final l = await _list(_todo);
+    if (i >= 0 && i < l.length) {
+      l[i]['done'] = !(l[i]['done'] == true);
+      await _save(_todo, l);
+    }
+  }
+
+  static int habitStreak(Map<String, dynamic> h) =>
+      _streak((h['days'] as List).cast<String>());
+
   static bool handles(String intent) => const {
         'todo_add', 'todo_list', 'todo_done', 'todo_clear',
         'note_add', 'note_list', 'note_clear',
