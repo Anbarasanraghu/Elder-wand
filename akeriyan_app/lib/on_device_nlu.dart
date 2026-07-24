@@ -82,6 +82,30 @@ class OnDeviceNlu {
       };
     }
 
+    // ---- battery ----
+    if (RegExp(r'\bbattery\b').hasMatch(t) ||
+        RegExp(r'\bhow much (charge|power)\b').hasMatch(t) ||
+        RegExp(r'\bcharge (left|remaining)\b').hasMatch(t)) {
+      return {'intent': 'battery', 'slots': {}, 'speak': ''};
+    }
+
+    // ---- redial / call last ----
+    if (RegExp(r'\b(redial|call back|call (back |the )?last (person|number|caller|call))\b')
+        .hasMatch(t)) {
+      return {'intent': 'redial', 'slots': {}, 'speak': ''};
+    }
+
+    // ---- read messages ----
+    if (RegExp(r'\bmessages?\b').hasMatch(t) &&
+        RegExp(r'\b(any|new|unread|read|check|show|latest|got)\b').hasMatch(t) &&
+        !RegExp(r'\b(send|tell|reply|to)\b').hasMatch(t)) {
+      return {
+        'intent': 'read_notifications',
+        'slots': {'kind': 'messages'},
+        'speak': '',
+      };
+    }
+
     // ---- notifications ----
     if (t.contains('notification')) {
       return {

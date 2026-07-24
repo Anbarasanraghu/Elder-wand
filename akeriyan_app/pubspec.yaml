@@ -36,6 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   dio: ^5.9.2
   http: ^1.6.0 # direct free-API calls for on-device weather/news/search
+  battery_plus: ^6.2.1 # "how much battery"
+  call_log: ^5.0.0 # redial / call the last person
   shared_preferences: ^2.5.5
   record: ^7.1.0
   permission_handler: ^12.0.3

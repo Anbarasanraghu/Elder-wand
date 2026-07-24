@@ -36,6 +36,8 @@ import 'on_device_skills.dart';
 import 'on_device_nlu.dart';
 import 'personal_store.dart';
 import 'personal_screen.dart';
+import 'package:battery_plus/battery_plus.dart';
+import 'package:call_log/call_log.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'history_screen.dart';
 import 'trading_screen.dart';
@@ -474,6 +476,26 @@ class _AssistantScreenState extends State<AssistantScreen>
     await _finishTurn(text, 'en');
   }
 
+  /// Redial the most recent call from the call log.
+  Future<String> _redial() async {
+    if (!(await Permission.phone.request()).isGranted) {
+      return 'I need call access to redial. Please allow it in settings.';
+    }
+    try {
+      final entries = await CallLog.query();
+      final last = entries.isNotEmpty ? entries.first : null;
+      final number = last?.number;
+      if (number == null || number.isEmpty) {
+        return "I couldn't find a recent call.";
+      }
+      await PhoneCaller.call(number);
+      final who = (last?.name?.isNotEmpty ?? false) ? last!.name : number;
+      return 'Calling $who.';
+    } catch (_) {
+      return "I couldn't access the call log.";
+    }
+  }
+
   /// Fulfil an intent the on-device parser recognised — compute skills
   /// (weather/news/search/briefing/math) or run device actions via
   /// _handleIntent — all on the phone, then speak.
@@ -501,6 +523,14 @@ class _AssistantScreenState extends State<AssistantScreen>
         speak = '$w  $n';
       case 'math':
         speak = OnDeviceNlu.calculate(slots['expression'] as String? ?? text);
+      case 'battery':
+        final b = Battery();
+        final level = await b.batteryLevel;
+        final st = await b.batteryState;
+        speak = 'Battery is at $level percent'
+            '${st == BatteryState.charging ? ', and charging' : ''}.';
+      case 'redial':
+        speak = await _redial();
       case 'smalltalk':
         break; // time / greeting — speak already set
       default:
@@ -755,9 +785,11 @@ class _AssistantScreenState extends State<AssistantScreen>
           speak = 'Please grant notification access first. Opening settings.';
           await NotificationReader.requestPermission();
         } else {
-          speak = slots['kind'] == 'all'
-              ? NotificationReader.allSpoken()
-              : NotificationReader.latestSpoken();
+          speak = slots['kind'] == 'messages'
+              ? NotificationReader.messagesSpoken()
+              : slots['kind'] == 'all'
+                  ? NotificationReader.allSpoken()
+                  : NotificationReader.latestSpoken();
         }
         break;
 

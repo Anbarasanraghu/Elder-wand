@@ -54,6 +54,24 @@ class NotificationReader {
     return items;
   }
 
+  static const _msgApps = {
+    'whatsapp', 'telegram', 'messaging', 'messenger', 'signal',
+    'instagram', 'sms', 'mms', 'gm', 'gmail',
+  };
+
+  /// Spoken summary of recent MESSAGE notifications only.
+  static String messagesSpoken({int count = 5}) {
+    final msgs = _log.where((n) {
+      final a = (n['app'] ?? '').toLowerCase();
+      return _msgApps.any((m) => a.contains(m));
+    }).take(count).toList();
+    if (msgs.isEmpty) return 'You have no new messages.';
+    final body = msgs
+        .map((n) => '${_appLabel(n['app'] ?? '')} from ${n['title']}: ${n['text']}')
+        .join('. ');
+    return 'You have ${msgs.length} message${msgs.length != 1 ? 's' : ''}. $body';
+  }
+
   static String _appLabel(String pkg) {
     if (pkg.contains('whatsapp')) return 'WhatsApp';
     if (pkg.contains('gm') || pkg.contains('gmail')) return 'Gmail';
