@@ -257,6 +257,21 @@ class OnDeviceNlu {
         .hasMatch(t)) {
       return {'intent': 'scan_text', 'slots': {}, 'speak': ''};
     }
+    // vision: ask the multimodal brain about a photo (scene understanding,
+    // not text — OCR above handles reading text).
+    if (RegExp(r"\bwhat(?:'s| is| are)? (?:in|on) (?:this|the|my) (?:image|photo|picture|pic|camera|screen)\b")
+            .hasMatch(t) ||
+        RegExp(r'\b(describe|analy[sz]e|look at|check|see) (?:this|the|my) (?:photo|image|picture|pic|scene|surroundings?)\b')
+            .hasMatch(t) ||
+        RegExp(r'\bwhat (?:am i looking at|do you see|is this)\b').hasMatch(t) ||
+        t == 'read this image' ||
+        t == 'read the image') {
+      return {
+        'intent': 'vision_ask',
+        'slots': {'question': raw.trim()},
+        'speak': '',
+      };
+    }
     // ==========================================================
 
     // ================= PERSONAL DATA (all on-device) =================

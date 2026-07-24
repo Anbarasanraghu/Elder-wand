@@ -244,12 +244,43 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  // Pick a brain: E2B is faster + lighter, E4B is smarter.
+                  // Both read images.
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => setState(
+                              () => _urlCtrl.text = GemmaService.modelE2B),
+                          child: const Text('Fast · E2B (2.4GB)',
+                              style: TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => setState(
+                              () => _urlCtrl.text = GemmaService.modelE4B),
+                          child: const Text('Smart · E4B (4.3GB)',
+                              style: TextStyle(fontSize: 12)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Both read images. E2B generates noticeably faster on the '
+                    'phone; E4B is smarter but slower. Switching downloads the '
+                    'new model.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: _urlCtrl,
                     maxLines: 2,
                     style: const TextStyle(fontSize: 12),
                     decoration: const InputDecoration(
-                      labelText: 'model .task URL',
+                      labelText: 'model URL (.litertlm)',
                       isDense: true,
                       border: OutlineInputBorder(),
                     ),

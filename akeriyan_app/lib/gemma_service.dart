@@ -17,12 +17,17 @@ class GemmaService {
   static InferenceModel? _model;
   static InferenceChat? _chat;
 
-  /// Most capable default: Gemma 4 E4B (LiteRT-LM). ~4.4 GB — big download, but
-  /// the plugin uses a resumable background downloader. Swap the `E4B` for `E2B`
-  /// in the URL for a smaller/faster (~3 GB) but still very capable model.
-  static const String defaultModelUrl =
+  /// Two on-device brains — both multimodal (text + image). E2B is the
+  /// recommended default: ~2.4 GB, noticeably faster, and still reads images.
+  /// E4B is smarter but ~4.3 GB and slower to generate.
+  static const String modelE2B = // Fast + light, reads images
+      'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/'
+      'resolve/main/gemma-4-E2B-it.litertlm';
+  static const String modelE4B = // Smart, heavier/slower, reads images
       'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/'
       'resolve/main/gemma-4-E4B-it.litertlm';
+
+  static const String defaultModelUrl = modelE2B;
 
   static bool get isLoaded => _model != null && _chat != null;
 
@@ -157,6 +162,7 @@ class GemmaService {
       topK: 40,
       topP: 0.9,
       maxOutputTokens: 220,
+      supportImage: true, // let the brain read photos (Gemma 4 is multimodal)
       systemInstruction:
           "You are Elder Wand, the user's sharp, friendly personal assistant, "
           "in the spirit of JARVIS. You remember the ongoing conversation and "
@@ -197,6 +203,23 @@ class GemmaService {
       } catch (_) {
         break; // if the engine rejects seeding, just start fresh
       }
+    }
+  }
+
+  /// Ask about an image, on-device. Streams the answer token-by-token.
+  /// [prompt] is the user's question; empty means "just describe it".
+  static Stream<String> askImage(Uint8List image, String prompt) async* {
+    final chat = _chat;
+    if (chat == null) {
+      throw StateError('Gemma model not loaded — call load() first.');
+    }
+    final q = prompt.trim().isEmpty
+        ? 'Describe what you see in this image in one or two sentences.'
+        : prompt.trim();
+    await chat.addQueryChunk(
+        Message.withImage(text: q, imageBytes: image, isUser: true));
+    await for (final r in chat.generateChatResponseAsync()) {
+      if (r is TextResponse) yield r.token;
     }
   }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
+import 'dart:io';
 import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'tts_service.dart';
 import 'notification_service.dart';
@@ -622,6 +624,8 @@ class _AssistantScreenState extends State<AssistantScreen>
               MaterialPageRoute(
                   builder: (_) => const ScanScreen(startOcr: true)));
         }
+      case 'vision_ask':
+        speak = await _askPhoto(slots['question'] as String? ?? '');
       case 'battery':
         final b = Battery();
         final level = await b.batteryLevel;
@@ -645,6 +649,31 @@ class _AssistantScreenState extends State<AssistantScreen>
     if (mounted) setState(() => _response = speak);
     HistoryStore.add(youSaid: text, akeriyanSaid: speak, intent: intent);
     await TtsService.speakLocal(speak);
+  }
+
+  /// Capture a photo and have the on-device brain (Gemma, multimodal) answer a
+  /// question about it — fully on the phone, no backend. Streams into the reply.
+  Future<String> _askPhoto(String question) async {
+    if (!GemmaService.isLoaded) {
+      return 'Load the on-device brain first, then I can read images.';
+    }
+    final shot = await ImagePicker().pickImage(
+        source: ImageSource.camera, imageQuality: 85, maxWidth: 1024);
+    if (shot == null) return 'Okay, cancelled.';
+    if (mounted) setState(() => _response = 'Looking at the image…');
+    final bytes = await File(shot.path).readAsBytes();
+    ApiUsage.record('gemma');
+    final sb = StringBuffer();
+    try {
+      await for (final tok in GemmaService.askImage(bytes, question)) {
+        sb.write(tok);
+        if (mounted) setState(() => _response = sb.toString());
+      }
+    } catch (_) {
+      return "I couldn't read that image.";
+    }
+    final r = sb.toString().trim();
+    return r.isEmpty ? "I couldn't tell what's in the image." : r;
   }
 
   /// Given recognized [text], understand + respond — on-device Gemma for plain
@@ -1409,6 +1438,8 @@ class _AssistantScreenState extends State<AssistantScreen>
       crossAxisSpacing: 12,
       childAspectRatio: 1.62,
       children: [
+        _deckTile('Ask Photo', 'On-device vision', Icons.image_search,
+            () => _askPhoto(''), glow: true),
         for (final (label, sub, icon, screen, glow) in features)
           _deckTile(label, sub, icon, () => _go(screen), glow: glow),
       ],
