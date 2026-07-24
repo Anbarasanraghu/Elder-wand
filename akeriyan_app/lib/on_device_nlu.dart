@@ -486,10 +486,11 @@ class OnDeviceNlu {
       }
     }
 
-    // ---- math ----
-    if (RegExp(r"\b(calculate|what is|whats|what's|how much is)\b.*\d").hasMatch(t) ||
-        RegExp(r'\d+\s*(plus|minus|times|multiplied|divided|into|percent|power|\+|\-|\*|/|x)\b')
-            .hasMatch(t)) {
+    // ---- math (but not date questions like "4 years back") ----
+    if (!RegExp(r'\b(years?|months?|weeks?|days?)\b').hasMatch(t) &&
+        (RegExp(r"\b(calculate|what is|whats|what's|how much is)\b.*\d").hasMatch(t) ||
+            RegExp(r'\d+\s*(plus|minus|times|multiplied|divided|into|percent|power|\+|\-|\*|/|x)\b')
+                .hasMatch(t))) {
       return {'intent': 'math', 'slots': {'expression': t}, 'speak': ''};
     }
 
@@ -678,6 +679,15 @@ class OnDeviceNlu {
                     ? 'rd'
                     : 'th';
     if (t.contains('year')) {
+      // numeric offset: "4 years back", "in 3 years", "5 years from now"
+      final m = RegExp(r'(\d+)\s*years?').firstMatch(t);
+      if (m != null) {
+        final k = int.parse(m.group(1)!);
+        final back = RegExp(r'\b(back|ago|before|earlier|prior)\b').hasMatch(t) ||
+            t.contains('last') ||
+            t.contains('previous');
+        return 'That would be ${back ? n.year - k : n.year + k}.';
+      }
       if (t.contains('next')) return 'Next year is ${n.year + 1}.';
       if (t.contains('last') || t.contains('previous')) {
         return 'Last year was ${n.year - 1}.';
