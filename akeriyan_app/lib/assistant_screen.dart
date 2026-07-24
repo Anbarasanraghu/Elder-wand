@@ -54,7 +54,8 @@ class AssistantScreen extends StatefulWidget {
   State<AssistantScreen> createState() => _AssistantScreenState();
 }
 
-class _AssistantScreenState extends State<AssistantScreen> {
+class _AssistantScreenState extends State<AssistantScreen>
+    with WidgetsBindingObserver {
   final _recorder = AudioRecorder();
   final _dio = Dio();
   final _wake = OpenWakeWordService();
@@ -73,12 +74,27 @@ class _AssistantScreenState extends State<AssistantScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initTts();
     _autoLoadGemma(); // load the on-device brain so chat runs on the phone
-    _startWakeWord();
-    AkeriyanForegroundService.start();
+    // Start the foreground (microphone) service FIRST so the OS permits mic
+    // capture while the app is in the background, then start listening.
+    AkeriyanForegroundService.start().whenComplete(_startWakeWord);
     NotificationReader.start();
     AlertsPoller.start(widget.backendUrl, widget.token);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // "Hey Elder Wand" should keep working when the app is hidden (like
+    // "Hey Google"). The foreground service keeps the listener alive in the
+    // background, so we do NOT stop it on pause. On resume we just make sure
+    // it's still listening (restart if the OS killed it).
+    if (state == AppLifecycleState.resumed) {
+      if (!_recording && !_thinking && !_wake.listening) {
+        _startWakeWord();
+      }
+    }
   }
 
   /// If an on-device model has been downloaded, load it into memory at startup
@@ -180,6 +196,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoStop?.cancel();
     _wake.stop();
     _stt.stop();
