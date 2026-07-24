@@ -33,6 +33,7 @@ import 'gemma_test_screen.dart';
 import 'gemma_service.dart';
 import 'voice_screen.dart';
 import 'on_device_skills.dart';
+import 'on_device_nlu.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'history_screen.dart';
 import 'trading_screen.dart';
@@ -471,6 +472,45 @@ class _AssistantScreenState extends State<AssistantScreen>
     await _finishTurn(text, 'en');
   }
 
+  /// Fulfil an intent the on-device parser recognised — compute skills
+  /// (weather/news/search/briefing/math) or run device actions via
+  /// _handleIntent — all on the phone, then speak.
+  Future<void> _handleLocal(Map<String, dynamic> local, String text) async {
+    final intent = local['intent'] as String;
+    final slots = ((local['slots'] as Map?) ?? {}).cast<String, dynamic>();
+    var speak = (local['speak'] as String?) ?? '';
+    _lastOnDevice = true;
+    switch (intent) {
+      case 'weather':
+        final pos = await LocationService.current();
+        speak = await OnDeviceSkills.weather(
+            city: slots['city'] as String?,
+            lat: pos?.latitude,
+            lon: pos?.longitude);
+      case 'news':
+        speak = await OnDeviceSkills.news(topic: slots['topic'] as String?);
+      case 'web_search':
+        speak = await OnDeviceSkills.search(slots['query'] as String? ?? text);
+      case 'briefing':
+        final pos = await LocationService.current();
+        final w = await OnDeviceSkills.weather(
+            lat: pos?.latitude, lon: pos?.longitude);
+        final n = await OnDeviceSkills.news();
+        speak = '$w  $n';
+      case 'math':
+        speak = OnDeviceNlu.calculate(slots['expression'] as String? ?? text);
+      case 'smalltalk':
+        break; // time / greeting — speak already set
+      default:
+        // Device actions: reminder, timer, flashlight, open app, call,
+        // whatsapp, notifications — executed on the phone.
+        speak = await _handleIntent(intent, slots, speak);
+    }
+    if (mounted) setState(() => _response = speak);
+    HistoryStore.add(youSaid: text, akeriyanSaid: speak, intent: intent);
+    await TtsService.speakLocal(speak);
+  }
+
   /// Given recognized [text], understand + respond — on-device Gemma for plain
   /// chat, backend for actions — then speak. Shared by both STT paths.
   Future<void> _finishTurn(String text, String lang) async {
@@ -481,23 +521,16 @@ class _AssistantScreenState extends State<AssistantScreen>
       _response = '';
     });
     try {
-      // On-device SKILLS first: weather / news / web search via free public
-      // APIs — answered entirely on the phone, no backend needed.
-      String? skill;
+      // On-device UNDERSTANDING first: everything the phone can fully handle
+      // (reminders, timer, flashlight, open app, calls, weather, news,
+      // briefing, math, time…) — no backend, no PC.
       if (lang == 'en') {
-        final pos = await LocationService.current();
-        skill = await OnDeviceSkills.respond(text,
-            lat: pos?.latitude, lon: pos?.longitude);
-      }
-      if (skill != null) {
-        setState(() {
-          _response = skill!;
-          _lastOnDevice = true;
-        });
-        HistoryStore.add(youSaid: text, akeriyanSaid: skill, intent: 'skill');
-        spoke = true;
-        await TtsService.speakLocal(skill);
-        return; // handled on-device — finally still runs the follow-up
+        final local = OnDeviceNlu.parse(text);
+        if (local != null) {
+          await _handleLocal(local, text);
+          spoke = true;
+          return; // finally still runs the follow-up
+        }
       }
 
       // On-device brain: plain conversation answered on the phone.
