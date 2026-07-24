@@ -39,6 +39,7 @@ import 'api_registry.dart';
 import 'api_registry_screen.dart';
 import 'memory_store.dart';
 import 'memory_screen.dart';
+import 'memory_extractor.dart';
 import 'personal_store.dart';
 import 'personal_screen.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -598,6 +599,17 @@ class _AssistantScreenState extends State<AssistantScreen>
 
   /// Given recognized [text], understand + respond — on-device Gemma for plain
   /// chat, backend for actions — then speak. Shared by both STT paths.
+  /// Quietly learn durable facts from a normal sentence (not the explicit
+  /// "remember that…" path, which handles its own storage). Facts show up in
+  /// About You and load into the brain on its next start.
+  void _maybeCaptureFacts(String text, Map<String, dynamic>? local) {
+    final intent = local?['intent'] as String?;
+    if (intent != null && intent.startsWith('memory_')) return;
+    for (final fact in MemoryExtractor.extract(text)) {
+      MemoryStore.add(fact);
+    }
+  }
+
   Future<void> _finishTurn(String text, String lang,
       {bool followUp = true}) async {
     bool spoke = false;
@@ -613,6 +625,7 @@ class _AssistantScreenState extends State<AssistantScreen>
       // briefing, math, time…) — no backend, no PC.
       if (lang == 'en') {
         final local = OnDeviceNlu.parse(text);
+        _maybeCaptureFacts(text, local); // auto-learn facts from natural speech
         if (local != null) {
           await _handleLocal(local, text);
           spoke = true;
