@@ -394,42 +394,80 @@ class _AssistantScreenState extends State<AssistantScreen>
   Future<void> _onDeviceTurn({bool followUp = false}) async {
     await _wake.stop();
     if (mounted) setState(() => _wakeActive = false);
+    // Let the OS release the mic from the wake listener before STT grabs it —
+    // without this pause speech_to_text often gets a dead/empty mic.
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    final completer = Completer<String>();
+    void finish(String words) {
+      if (!completer.isCompleted) completer.complete(words);
+    }
+
     _sttReady = _sttReady ||
-        await _stt.initialize(onError: (_) {}, onStatus: (_) {});
+        await _stt.initialize(
+          onError: (e) {
+            debugPrint('[STT] error: ${e.errorMsg}');
+            finish(''); // no-match / busy / timeout
+          },
+          onStatus: (s) => debugPrint('[STT] status: $s'),
+        );
     if (!_sttReady) {
+      if (mounted) {
+        setState(() => _heard =
+            'Speech recognition unavailable. Grant mic permission and install '
+            'Google speech services.');
+      }
       if (await _startRecording()) _beginEndpointing(followUp: followUp);
       return;
     }
+
     if (mounted) {
       setState(() {
         _recording = true;
-        _heard = followUp ? 'Listening… (follow-up)' : 'Listening…';
+        _heard = 'Listening… say it now';
       });
     }
-    final completer = Completer<String>();
-    await _stt.listen(
-      onResult: (r) {
-        if (mounted) setState(() => _heard = '"${r.recognizedWords}"');
-        if (r.finalResult && !completer.isCompleted) {
-          completer.complete(r.recognizedWords);
-        }
-      },
-      listenOptions: stt.SpeechListenOptions(
-        listenFor: const Duration(seconds: 30),
-        pauseFor: Duration(seconds: followUp ? 3 : 4),
-      ),
-    );
+
+    var lastWords = '';
+    try {
+      await _stt.listen(
+        onResult: (r) {
+          lastWords = r.recognizedWords;
+          if (mounted) {
+            setState(() => _heard =
+                lastWords.isEmpty ? 'Listening… say it now' : '"$lastWords"');
+          }
+          if (r.finalResult) finish(lastWords);
+        },
+        listenOptions: stt.SpeechListenOptions(
+          listenFor: const Duration(seconds: 20),
+          pauseFor: Duration(seconds: followUp ? 3 : 4),
+          partialResults: true, // show words as they're spoken
+          cancelOnError: true,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[STT] listen failed: $e');
+      finish('');
+    }
+
+    // Fall back to whatever partial words we captured if it never "finalises".
     final text = await completer.future
-        .timeout(const Duration(seconds: 35), onTimeout: () => '');
+        .timeout(const Duration(seconds: 22), onTimeout: () => lastWords);
+    try {
+      await _stt.stop();
+    } catch (_) {}
     if (mounted) setState(() => _recording = false);
+
     if (text.trim().isEmpty) {
-      if (!followUp && mounted) {
-        setState(() => _heard = "I didn't catch that. Try again.");
+      if (mounted) {
+        setState(() =>
+            _heard = "I didn't catch that — tap the orb and try again.");
       }
       await _resumeWake();
       return;
     }
-    await _finishTurn(text, 'en'); // on-device STT uses the device locale
+    await _finishTurn(text, 'en');
   }
 
   /// Given recognized [text], understand + respond — on-device Gemma for plain
