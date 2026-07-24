@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Speaks replies with the natural offline Piper voice served by the backend
 /// (`POST /v1/tts` -> WAV), and falls back to the phone's built-in TTS when the
@@ -33,7 +34,15 @@ class TtsService {
         }
       } catch (_) {}
       await _device.setLanguage('en-US');
-      await _pickNaturalVoice();
+      // Apply the user's saved voice if they picked one; else best-quality.
+      final saved = await _savedVoice();
+      if (saved != null) {
+        try {
+          await _device.setVoice(saved);
+        } catch (_) {}
+      } else {
+        await _pickNaturalVoice();
+      }
       await _device.setSpeechRate(0.52); // natural pace
       await _device.setPitch(1.0);
       await _device.awaitSpeakCompletion(true);
@@ -41,36 +50,74 @@ class TtsService {
     }
   }
 
-  /// Pick the most natural available English voice. Google's neural voices are
-  /// usually the "network"/"neural" ones and sound close to human; plain
-  /// "local" voices are the robotic fallbacks.
-  static Future<void> _pickNaturalVoice() async {
+  static const _kVoiceName = 'tts_voice_name';
+  static const _kVoiceLocale = 'tts_voice_locale';
+
+  static Future<Map<String, String>?> _savedVoice() async {
+    final p = await SharedPreferences.getInstance();
+    final n = p.getString(_kVoiceName), l = p.getString(_kVoiceLocale);
+    return (n != null && l != null) ? {'name': n, 'locale': l} : null;
+  }
+
+  /// All English voices on the phone, best quality first — for the picker.
+  static Future<List<Map<String, String>>> englishVoices() async {
     try {
       final raw = await _device.getVoices;
-      if (raw is! List) return;
+      if (raw is! List) return [];
       final en = <Map<String, String>>[];
       for (final v in raw) {
         if (v is Map) {
           final locale = '${v['locale'] ?? ''}';
           if (locale.toLowerCase().startsWith('en')) {
-            en.add({'name': '${v['name'] ?? ''}', 'locale': locale});
+            en.add({
+              'name': '${v['name'] ?? ''}',
+              'locale': locale,
+              'quality': '${v['quality'] ?? ''}',
+            });
           }
         }
       }
-      if (en.isEmpty) return;
-      int score(Map<String, String> v) {
-        final n = v['name']!.toLowerCase();
-        final l = v['locale']!.toLowerCase();
-        var s = 0;
-        if (n.contains('network')) s += 5; // Google neural (best)
-        if (n.contains('neural')) s += 5;
-        if (l.startsWith('en-us')) s += 2;
-        if (l.startsWith('en-gb')) s += 1;
-        if (n.contains('-local')) s -= 2; // low-quality local voices
-        return s;
-      }
-      en.sort((a, b) => score(b).compareTo(score(a)));
-      await _device.setVoice(en.first);
+      en.sort((a, b) => _q(b['quality']!).compareTo(_q(a['quality']!)));
+      return en;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static int _q(String quality) => switch (quality) {
+        'very high' => 4,
+        'high' => 3,
+        'normal' => 2,
+        _ => 1,
+      };
+
+  /// Preview a voice without saving it.
+  static Future<void> previewVoice(Map<String, String> v) async {
+    try {
+      await _player.stop();
+      await _device.setVoice({'name': v['name']!, 'locale': v['locale']!});
+      await _device.speak("Hi, I'm Elder Wand. This is how I sound.");
+    } catch (_) {}
+  }
+
+  /// Save + apply a voice as the assistant's permanent voice.
+  static Future<void> selectVoice(Map<String, String> v) async {
+    try {
+      await _device.setVoice({'name': v['name']!, 'locale': v['locale']!});
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_kVoiceName, v['name']!);
+      await p.setString(_kVoiceLocale, v['locale']!);
+    } catch (_) {}
+  }
+
+  static Future<Map<String, String>?> currentVoice() => _savedVoice();
+
+  static Future<void> _pickNaturalVoice() async {
+    final en = await englishVoices();
+    if (en.isEmpty) return;
+    try {
+      await _device
+          .setVoice({'name': en.first['name']!, 'locale': en.first['locale']!});
     } catch (_) {}
   }
 

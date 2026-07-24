@@ -31,6 +31,7 @@ import 'flashlight_service.dart';
 import 'history_store.dart';
 import 'gemma_test_screen.dart';
 import 'gemma_service.dart';
+import 'voice_screen.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'history_screen.dart';
 import 'trading_screen.dart';
@@ -69,6 +70,7 @@ class _AssistantScreenState extends State<AssistantScreen>
   bool _thinking = false;
   bool _lastOnDevice = false; // was the last reply produced fully on the phone?
   bool _gemmaLoading = false; // on-device model warming up
+  static const String _wakeReply = 'Yeah?'; // spoken when the wake word fires
   String _heard = 'Say "Hey Elder Wand" or tap the orb';
 
   @override
@@ -139,7 +141,7 @@ class _AssistantScreenState extends State<AssistantScreen>
     await _wake.stop();
     setState(() => _wakeActive = false);
     SystemSound.play(SystemSoundType.click); // earcon: "I'm awake"
-    await TtsService.speak('Yes?');
+    await TtsService.speakLocal(_wakeReply);
     await Future.delayed(const Duration(milliseconds: 600));
     await _onDeviceTurn(); // on-device STT (falls back to recorder+Whisper)
   }
@@ -931,6 +933,8 @@ class _AssistantScreenState extends State<AssistantScreen>
                   _go(const AppsListScreen());
                 case 10:
                   _go(const GemmaTestScreen());
+                case 11:
+                  _go(const VoiceScreen());
               }
             },
             itemBuilder: (_) => const [
@@ -961,6 +965,9 @@ class _AssistantScreenState extends State<AssistantScreen>
               PopupMenuItem(
                   value: 10,
                   child: _MenuRow(Icons.memory, 'On-device AI (test)')),
+              PopupMenuItem(
+                  value: 11,
+                  child: _MenuRow(Icons.record_voice_over, 'Voice')),
             ],
           ),
           const SizedBox(width: 6),
