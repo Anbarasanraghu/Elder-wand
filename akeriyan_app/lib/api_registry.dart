@@ -126,6 +126,22 @@ class ApiRegistry {
       onDevice: true,
       powers: 'Alarms, timers, calendar events, music',
     ),
+    ApiInfo(
+      id: 'mlkit-ocr',
+      name: 'ML Kit OCR',
+      provider: 'On your phone',
+      category: catDevice,
+      onDevice: true,
+      powers: 'Reads text from the camera (document scan)',
+    ),
+    ApiInfo(
+      id: 'qr-scanner',
+      name: 'QR / Barcode Scanner',
+      provider: 'On your phone',
+      category: catDevice,
+      onDevice: true,
+      powers: 'Scans QR codes & barcodes',
+    ),
     // ---- your own backend ----
     ApiInfo(
       id: 'backend',

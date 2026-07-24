@@ -236,6 +236,20 @@ class OnDeviceNlu {
           .trim();
       return {'intent': 'play_music', 'slots': {'query': q}, 'speak': ''};
     }
+    // scan: QR / barcode vs text (OCR)
+    if (RegExp(r'\bscan\b').hasMatch(t) || t.contains('ocr')) {
+      final ocr = RegExp(r'\b(text|document|paper|note|sign|words?|ocr)\b')
+          .hasMatch(t);
+      return {
+        'intent': ocr ? 'scan_text' : 'scan_qr',
+        'slots': {},
+        'speak': '',
+      };
+    }
+    if (RegExp(r'\bread (this|the) (document|text|paper|sign|note)\b')
+        .hasMatch(t)) {
+      return {'intent': 'scan_text', 'slots': {}, 'speak': ''};
+    }
     // ==========================================================
 
     // ================= PERSONAL DATA (all on-device) =================

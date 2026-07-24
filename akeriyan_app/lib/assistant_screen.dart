@@ -42,6 +42,7 @@ import 'memory_screen.dart';
 import 'memory_extractor.dart';
 import 'proactive_service.dart';
 import 'proactive_screen.dart';
+import 'scan_screen.dart';
 import 'personal_store.dart';
 import 'personal_screen.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -575,6 +576,19 @@ class _AssistantScreenState extends State<AssistantScreen>
       case 'memory_forget':
         MemoryStore.clear();
         speak = "Done — I've forgotten what I knew about you.";
+      case 'scan_qr':
+        speak = 'Opening the QR scanner.';
+        if (mounted) {
+          Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const ScanScreen()));
+        }
+      case 'scan_text':
+        speak = 'Opening the text scanner.';
+        if (mounted) {
+          Navigator.push(context,
+              MaterialPageRoute(
+                  builder: (_) => const ScanScreen(startOcr: true)));
+        }
       case 'battery':
         final b = Battery();
         final level = await b.batteryLevel;
@@ -1328,6 +1342,8 @@ class _AssistantScreenState extends State<AssistantScreen>
           const MemoryScreen(), true),
       ('Proactive', 'Briefing & alerts', Icons.notifications_active_outlined,
           const ProactiveScreen(), false),
+      ('Scan', 'QR & text (OCR)', Icons.qr_code_scanner,
+          const ScanScreen(), false),
       ('Memory', 'Past chats', Icons.history, const HistoryScreen(), false),
       ('Meeting', 'Record & sum up', Icons.mic_none,
           MeetingScreen(backendUrl: widget.backendUrl, token: widget.token), false),
