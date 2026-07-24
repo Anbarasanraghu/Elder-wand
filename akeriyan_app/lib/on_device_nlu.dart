@@ -539,11 +539,20 @@ class OnDeviceNlu {
       };
     }
 
-    // ---- time ----
-    if (t.contains('what time') ||
-        t.contains("what's the time") ||
-        t.contains('time is it')) {
+    // ---- time (always from the device clock, never guessed) ----
+    if (RegExp(r'\btime\b').hasMatch(t) &&
+        RegExp(r'\b(what|whats|current|now|tell|the|is it)\b').hasMatch(t)) {
       return {'intent': 'smalltalk', 'slots': {}, 'speak': 'It is ${_clock()}.'};
+    }
+    // ---- date / day / year / month (from the device clock) ----
+    if (RegExp(r'\b(date|today|todays|day|year|month)\b').hasMatch(t) &&
+        RegExp(r"\b(what|what'?s|whats|which|current|tell me|today|todays|is it|of the)\b")
+            .hasMatch(t) &&
+        !t.contains('remind') &&
+        !t.contains('birthday') &&
+        !t.contains('timer') &&
+        !RegExp(r'\bdays (until|till|to)\b').hasMatch(t)) {
+      return {'intent': 'smalltalk', 'slots': {}, 'speak': _dateSpoken(t)};
     }
 
     // ---- greeting ----
@@ -644,6 +653,37 @@ class OnDeviceNlu {
   }
 
   static String _clock() => _fmt(DateTime.now());
+
+  static const _weekdays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
+  static const _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+    'September', 'October', 'November', 'December'
+  ];
+
+  /// Spoken current date from the device clock — answers year/month/day/date.
+  static String _dateSpoken(String t) {
+    final n = DateTime.now();
+    final dow = _weekdays[n.weekday - 1];
+    final mon = _monthNames[n.month - 1];
+    final d = n.day;
+    final suffix = (d >= 11 && d <= 13)
+        ? 'th'
+        : d % 10 == 1
+            ? 'st'
+            : d % 10 == 2
+                ? 'nd'
+                : d % 10 == 3
+                    ? 'rd'
+                    : 'th';
+    if (t.contains('year')) return "It's ${n.year}.";
+    if (t.contains('month')) return "It's $mon ${n.year}.";
+    if (RegExp(r'\bday\b').hasMatch(t) && !t.contains('date')) {
+      return "It's $dow.";
+    }
+    return "It's $dow, $mon $d$suffix, ${n.year}.";
+  }
 
   // ---------- long-term memory helpers ----------
   /// Rewrite a first-person fact into second person so it reads back naturally

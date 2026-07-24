@@ -147,10 +147,25 @@ class GemmaService {
   /// second download. (A real fine-tuned trading LoRA can later swap in here.)
   static String mode = 'general';
 
+  static const _months = [
+    'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+    'September', 'October', 'November', 'December'
+  ];
+
   /// Build the system instruction for the active [mode], plus the user's facts.
   static Future<String> _systemInstruction() async {
     final p = await SharedPreferences.getInstance();
     mode = p.getString('brain_mode') ?? 'general';
+    // Ground the model in the REAL date/time so it never guesses the year from
+    // its training data (which thinks it's 2024).
+    final n = DateTime.now();
+    final h12 = n.hour % 12 == 0 ? 12 : n.hour % 12;
+    final ap = n.hour < 12 ? 'AM' : 'PM';
+    final dateLine =
+        "\n\nThe current date and time is ${_months[n.month - 1]} ${n.day}, "
+        "${n.year}, $h12:${n.minute.toString().padLeft(2, '0')} $ap. Treat this "
+        "as the real current date — never say the year is anything else, and do "
+        "not invent dates.";
     final mem = MemoryStore.summaryForPrompt();
     final memLine = mem.isEmpty
         ? ''
@@ -168,7 +183,7 @@ class GemmaService {
             "usually one or two sentences, but give a clear, helpful explanation "
             "(a few short sentences) when the user asks you to explain, teach, or "
             "compare something. Never use markdown, bullet points, or emojis.";
-    return base + memLine;
+    return base + dateLine + memLine;
   }
 
   static Future<void> _openChat() async {
