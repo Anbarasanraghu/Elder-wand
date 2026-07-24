@@ -677,8 +677,24 @@ class OnDeviceNlu {
                 : d % 10 == 3
                     ? 'rd'
                     : 'th';
-    if (t.contains('year')) return "It's ${n.year}.";
-    if (t.contains('month')) return "It's $mon ${n.year}.";
+    if (t.contains('year')) {
+      if (t.contains('next')) return 'Next year is ${n.year + 1}.';
+      if (t.contains('last') || t.contains('previous')) {
+        return 'Last year was ${n.year - 1}.';
+      }
+      return "It's ${n.year}.";
+    }
+    if (t.contains('month')) {
+      if (t.contains('next')) {
+        final m = n.month == 12 ? 0 : n.month;
+        return 'Next month is ${_monthNames[m]}.';
+      }
+      if (t.contains('last') || t.contains('previous')) {
+        final m = n.month == 1 ? 11 : n.month - 2;
+        return 'Last month was ${_monthNames[m]}.';
+      }
+      return "It's $mon ${n.year}.";
+    }
     if (RegExp(r'\bday\b').hasMatch(t) && !t.contains('date')) {
       return "It's $dow.";
     }
