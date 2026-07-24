@@ -160,6 +160,28 @@ class GemmaService {
     );
   }
 
+  /// Replay prior conversation turns into the chat so the brain remembers the
+  /// user across app restarts (ChatGPT-style memory). Each turn is
+  /// {'user':..., 'assistant':...}, oldest first. Call once right after
+  /// [load]. Long replies are trimmed so seeding stays cheap on context.
+  static Future<void> seedHistory(List<Map<String, String>> turns) async {
+    final chat = _chat;
+    if (chat == null) return;
+    for (final t in turns) {
+      final u = (t['user'] ?? '').trim();
+      final a = (t['assistant'] ?? '').trim();
+      if (u.isEmpty || a.isEmpty) continue;
+      final us = u.length > 240 ? '${u.substring(0, 240)}…' : u;
+      final as_ = a.length > 240 ? '${a.substring(0, 240)}…' : a;
+      try {
+        await chat.addQueryChunk(Message.text(text: us, isUser: true));
+        await chat.addQueryChunk(Message.text(text: as_, isUser: false));
+      } catch (_) {
+        break; // if the engine rejects seeding, just start fresh
+      }
+    }
+  }
+
   /// Stream a reply token-by-token. Throws if the model isn't loaded.
   static Stream<String> ask(String prompt) async* {
     final chat = _chat;

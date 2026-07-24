@@ -114,6 +114,15 @@ class _AssistantScreenState extends State<AssistantScreen>
       if (!await GemmaService.modelFileExists()) return;
       if (mounted) setState(() => _gemmaLoading = true);
       await GemmaService.load();
+      // Replay the recent conversation so the brain remembers the user across
+      // app restarts (ChatGPT-style memory), not just within one session.
+      final recent = HistoryStore.entries.value
+          .take(8)
+          .toList()
+          .reversed // oldest-first for correct chat order
+          .map((e) => {'user': e.youSaid, 'assistant': e.akeriyanSaid})
+          .toList();
+      if (recent.isNotEmpty) await GemmaService.seedHistory(recent);
     } catch (_) {
       // stays on the backend brain if load fails
     } finally {
