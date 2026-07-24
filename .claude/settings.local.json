@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(unzip -l vosk-model-small-en-us-0.15.zip)",
-      "Bash(flutter pub *)"
+      "Bash(flutter pub *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m 'TTS: use the phone'\\\\''s neural voice + speak instantly \\(less robotic, faster\\) *)",
+      "Bash(git push *)",
+      "Bash(cd \"c:/Users/anbar/.claude/projects/c--Users-anbar-Desktop-My-Projects-Akeriyan/memory\" && head -3 akeriyan-assistant.md)",
+      "Read(//c/Users/anbar/.claude/projects/c--Users-anbar-Desktop-My-Projects-Akeriyan/memory/**)",
+      "Bash(flutter analyze *)"
     ]
   }
 }

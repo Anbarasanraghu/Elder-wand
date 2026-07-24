@@ -217,6 +217,52 @@ class OnDeviceNlu {
     }
     // =================================================================
 
+    // ================= FINANCE (free APIs, on-device) =================
+    const curPat = r'(dollars?|rupees?|euros?|pounds?|yen|usd|inr|eur|gbp|jpy)';
+    // currency convert: "convert 20 dollars to rupees", "20 usd in inr"
+    final conv = RegExp('\\b(?:convert\\s+)?(\\d+(?:\\.\\d+)?)\\s*$curPat\\s+(?:to|in|into)\\s+$curPat\\b')
+        .firstMatch(t);
+    if (conv != null) {
+      return {
+        'intent': 'currency_convert',
+        'slots': {
+          'amount': double.parse(conv.group(1)!),
+          'from': conv.group(2)!,
+          'to': conv.group(3)!,
+        },
+        'speak': '',
+      };
+    }
+    // currency rate: "dollar to rupee rate", "euro to dollar exchange"
+    final rateM = RegExp('\\b$curPat\\s+(?:to|in|against)\\s+$curPat\\b').firstMatch(t);
+    if (rateM != null && (t.contains('rate') || t.contains('exchange'))) {
+      return {
+        'intent': 'currency_rate',
+        'slots': {'from': rateM.group(1)!, 'to': rateM.group(2)!},
+        'speak': '',
+      };
+    }
+    if (RegExp(r'\b(dollar|usd) (rate|value)\b').hasMatch(t)) {
+      return {
+        'intent': 'currency_rate',
+        'slots': {'from': 'dollar', 'to': 'rupee'},
+        'speak': '',
+      };
+    }
+    // crypto price
+    final coinM = RegExp(
+            r'\b(bitcoin|btc|ethereum|eth|solana|sol|dogecoin|doge|cardano|ada|ripple|xrp|binance coin|bnb|litecoin|ltc|polkadot|chainlink|avalanche)\b')
+        .firstMatch(t);
+    if (coinM != null &&
+        (t.contains('price') ||
+            t.contains('worth') ||
+            t.contains('cost') ||
+            t.contains('value') ||
+            RegExp(r'\bhow much (is|are)\b').hasMatch(t))) {
+      return {'intent': 'crypto_price', 'slots': {'coin': coinM.group(1)!}, 'speak': ''};
+    }
+    // =================================================================
+
     // ---- weather ----
     if (RegExp(r'\b(weather|temperature|forecast|how (hot|cold|warm)|will it rain|raining|humidity)\b')
         .hasMatch(t)) {

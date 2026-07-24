@@ -523,6 +523,16 @@ class _AssistantScreenState extends State<AssistantScreen>
         speak = '$w  $n';
       case 'math':
         speak = OnDeviceNlu.calculate(slots['expression'] as String? ?? text);
+      case 'crypto_price':
+        speak = await OnDeviceSkills.cryptoPrice(slots['coin'] as String);
+      case 'currency_convert':
+        speak = await OnDeviceSkills.currencyConvert(
+            (slots['amount'] as num).toDouble(),
+            slots['from'] as String,
+            slots['to'] as String);
+      case 'currency_rate':
+        speak = await OnDeviceSkills.currencyRate(
+            slots['from'] as String, slots['to'] as String);
       case 'battery':
         final b = Battery();
         final level = await b.batteryLevel;

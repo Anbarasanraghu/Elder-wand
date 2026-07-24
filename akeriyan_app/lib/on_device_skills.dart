@@ -175,6 +175,71 @@ class OnDeviceSkills {
     return "I couldn't find a quick answer for that.";
   }
 
+  // ---- crypto price (CoinGecko, free, no key) ----
+  static const _coins = {
+    'bitcoin': 'bitcoin', 'btc': 'bitcoin', 'ethereum': 'ethereum',
+    'eth': 'ethereum', 'solana': 'solana', 'sol': 'solana',
+    'dogecoin': 'dogecoin', 'doge': 'dogecoin', 'cardano': 'cardano',
+    'ada': 'cardano', 'ripple': 'ripple', 'xrp': 'ripple',
+    'binance coin': 'binancecoin', 'bnb': 'binancecoin',
+    'litecoin': 'litecoin', 'ltc': 'litecoin', 'polkadot': 'polkadot',
+    'chainlink': 'chainlink', 'avalanche': 'avalanche-2',
+  };
+
+  static Future<String> cryptoPrice(String coin) async {
+    final key = coin.toLowerCase().trim();
+    final id = _coins[key] ?? key.replaceAll(' ', '-');
+    final j = await _getJson(
+        'https://api.coingecko.com/api/v3/simple/price?ids=$id&vs_currencies=usd,inr&include_24hr_change=true');
+    final d = j?[id] as Map?;
+    if (d == null) return "I couldn't find a price for $coin.";
+    final usd = (d['usd'] as num?)?.round();
+    final inr = (d['inr'] as num?)?.round();
+    final chg = (d['usd_24h_change'] as num?);
+    final trend = chg == null
+        ? ''
+        : ', ${chg < 0 ? 'down' : 'up'} ${chg.abs().toStringAsFixed(1)} percent today';
+    return '$coin is $usd dollars${inr != null ? ', about $inr rupees' : ''}$trend.';
+  }
+
+  // ---- currency (open.er-api.com, free, no key) ----
+  static const _curNames = {
+    'USD': 'dollars', 'INR': 'rupees', 'EUR': 'euros', 'GBP': 'pounds',
+    'JPY': 'yen', 'AUD': 'Australian dollars', 'CAD': 'Canadian dollars',
+  };
+
+  static String curCode(String w) {
+    w = w.toLowerCase().trim();
+    if (w.startsWith('dollar')) return 'USD';
+    if (w.startsWith('rupee')) return 'INR';
+    if (w.startsWith('euro')) return 'EUR';
+    if (w.startsWith('pound')) return 'GBP';
+    if (w == 'yen') return 'JPY';
+    return w.toUpperCase();
+  }
+
+  static String _curName(String code) => _curNames[code] ?? code;
+
+  static Future<String> currencyConvert(
+      double amount, String from, String to) async {
+    from = curCode(from);
+    to = curCode(to);
+    final j = await _getJson('https://open.er-api.com/v6/latest/$from');
+    final rate = (j?['rates'] as Map?)?[to] as num?;
+    if (rate == null) return "I couldn't get that exchange rate.";
+    final result = (amount * rate).round();
+    return '${amount.round()} ${_curName(from)} is $result ${_curName(to)}.';
+  }
+
+  static Future<String> currencyRate(String from, String to) async {
+    from = curCode(from);
+    to = curCode(to);
+    final j = await _getJson('https://open.er-api.com/v6/latest/$from');
+    final rate = (j?['rates'] as Map?)?[to] as num?;
+    if (rate == null) return "I couldn't get that exchange rate.";
+    return 'One ${_curName(from).replaceAll('s', '')} is ${rate.toStringAsFixed(2)} ${_curName(to)}.';
+  }
+
   // ---- shared ----
   static const _t = Duration(seconds: 10);
 
