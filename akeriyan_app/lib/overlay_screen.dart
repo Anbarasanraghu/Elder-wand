@@ -40,6 +40,36 @@ class _OverlayScreenState extends State<OverlayScreen> {
     setState(() => _on = v);
   }
 
+  void _toast(String m) {
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(m)));
+    }
+  }
+
+  Future<void> _preview() async {
+    // Re-check permission live (state may be stale after granting).
+    if (!await OverlayAssistant.hasPermission()) {
+      _toast('Grant "Draw over other apps" first, then tap Preview again.');
+      await OverlayAssistant.requestPermission();
+      await _load();
+      return;
+    }
+    try {
+      await OverlayAssistant.show();
+      await Future.delayed(const Duration(milliseconds: 400));
+      await OverlayAssistant.update(
+          status: 'This is your floating panel',
+          body: 'Say "open our space" to open the app.');
+      final active = await OverlayAssistant.isActive();
+      _toast(active
+          ? 'Panel is active — it should be at the top of your screen.'
+          : 'Panel did not start (isActive=false).');
+    } catch (e) {
+      _toast('Overlay error: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -116,14 +146,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
                   ),
                   icon: const Icon(Icons.preview),
                   label: const Text('Preview the panel'),
-                  onPressed: _granted
-                      ? () async {
-                          await OverlayAssistant.show();
-                          await OverlayAssistant.update(
-                              status: 'This is your floating panel',
-                              body: 'Say "open our space" to open the app.');
-                        }
-                      : null,
+                  onPressed: _preview,
                 ),
               ],
             ),
