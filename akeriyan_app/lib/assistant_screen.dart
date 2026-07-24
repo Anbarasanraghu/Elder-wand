@@ -514,6 +514,7 @@ class _AssistantScreenState extends State<AssistantScreen>
           HistoryStore.add(
               youSaid: text, akeriyanSaid: streamedSpeak, intent: 'chat');
           spoke = true;
+          await TtsService.speakLocal(streamedSpeak); // phone voice, not Piper
         } else {
           String speak = (nluData!['speak'] as String?) ?? '';
           final intent = nluData['intent'] as String?;
@@ -535,7 +536,7 @@ class _AssistantScreenState extends State<AssistantScreen>
           HistoryStore.add(
               youSaid: text, akeriyanSaid: speak, intent: intent ?? 'unknown');
           spoke = true;
-          await TtsService.speak(speak,
+          await TtsService.speakLocal(speak,
               lang: (nluData['speak_lang'] as String?) ?? 'en');
         }
       }
@@ -616,7 +617,6 @@ class _AssistantScreenState extends State<AssistantScreen>
     String fullSpeak = '';
     Map<String, dynamic>? result;
 
-    TtsService.beginStream();
     try {
       await for (final chunk in byteStream) {
         buf.addAll(chunk);
@@ -636,8 +636,7 @@ class _AssistantScreenState extends State<AssistantScreen>
               if (mounted) setState(() => _response = fullSpeak);
               break;
             case 'audio':
-              TtsService.enqueueWav(base64Decode(ev['b64'] as String));
-              break;
+              break; // ignore Piper audio — we speak with the phone voice
             case 'result':
               result = Map<String, dynamic>.from(ev);
               break;
@@ -649,9 +648,7 @@ class _AssistantScreenState extends State<AssistantScreen>
           }
         }
       }
-    } finally {
-      if (isChat) await TtsService.endStream();
-    }
+    } finally {}
 
     if (isChat) return {'mode': 'chat', 'speak': fullSpeak};
     if (result != null) return {'mode': 'result', 'data': result};
@@ -884,7 +881,7 @@ class _AssistantScreenState extends State<AssistantScreen>
       setState(() => _response = speak);
       HistoryStore.add(
           youSaid: text, akeriyanSaid: speak, intent: intent ?? 'unknown');
-      await TtsService.speak(speak);
+      await TtsService.speakLocal(speak);
     } catch (e) {
       setState(() => _heard = 'Error: $e');
     } finally {
