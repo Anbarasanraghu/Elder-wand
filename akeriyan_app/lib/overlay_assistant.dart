@@ -36,6 +36,9 @@ class OverlayAssistant {
       flag: OverlayFlag.defaultFlag, // focusable so it can show over apps
       enableDrag: false,
       positionGravity: PositionGravity.none,
+      // Explicit start position overrides any stale/saved offset that was
+      // pushing the window off-screen. (0,0) + bottom gravity => screen bottom.
+      startPosition: const OverlayPosition(0, 0),
       overlayTitle: 'Elder Wand',
     );
   }
