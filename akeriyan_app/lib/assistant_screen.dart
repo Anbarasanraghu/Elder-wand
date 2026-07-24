@@ -37,6 +37,8 @@ import 'on_device_nlu.dart';
 import 'device_actions.dart';
 import 'api_registry.dart';
 import 'api_registry_screen.dart';
+import 'memory_store.dart';
+import 'memory_screen.dart';
 import 'personal_store.dart';
 import 'personal_screen.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -559,6 +561,16 @@ class _AssistantScreenState extends State<AssistantScreen>
         );
       case 'play_music':
         speak = await DeviceActions.playMusic(slots['query'] as String? ?? '');
+      case 'memory_add':
+        final fact = slots['fact'] as String;
+        MemoryStore.add(fact);
+        await GemmaService.noteFact(fact); // teach the live brain too
+        if (speak.isEmpty) speak = "Got it — I'll remember that.";
+      case 'memory_recall':
+        speak = MemoryStore.spoken();
+      case 'memory_forget':
+        MemoryStore.clear();
+        speak = "Done — I've forgotten what I knew about you.";
       case 'battery':
         final b = Battery();
         final level = await b.batteryLevel;
@@ -1296,6 +1308,8 @@ class _AssistantScreenState extends State<AssistantScreen>
           const GemmaTestScreen(), true),
       ('APIs', 'What I can access', Icons.hub_outlined,
           const ApiRegistryScreen(), true),
+      ('About You', 'What I remember', Icons.psychology_outlined,
+          const MemoryScreen(), true),
       ('Memory', 'Past chats', Icons.history, const HistoryScreen(), false),
       ('Meeting', 'Record & sum up', Icons.mic_none,
           MeetingScreen(backendUrl: widget.backendUrl, token: widget.token), false),

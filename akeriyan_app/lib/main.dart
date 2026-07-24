@@ -5,6 +5,7 @@ import 'assistant_screen.dart';
 import 'foreground_service.dart';
 import 'history_store.dart';
 import 'api_registry.dart';
+import 'memory_store.dart';
 import 'theme.dart';
 import 'widgets/assistant_orb.dart';
 import 'widgets/gradient_border.dart';
@@ -15,6 +16,7 @@ void main() async {
   AkeriyanForegroundService.init();
   await HistoryStore.init(); // load saved transcript (offline + survives restart)
   await ApiUsage.init(); // load persisted API-usage counts for the APIs page
+  await MemoryStore.init(); // load permanent facts the assistant knows about you
   // Register the on-device LLM engine (LiteRT-LM) for the Gemma brain.
   try {
     await GemmaService.initEngine();

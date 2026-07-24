@@ -5,6 +5,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
 
+import 'memory_store.dart';
+
 /// On-device LLM brain powered by flutter_gemma 1.x + the LiteRT-LM engine.
 ///
 /// Runs Gemma entirely on the phone — no backend, no network, no PC. Defaults to
@@ -143,6 +145,11 @@ class GemmaService {
       maxTokens: maxTokens,
       preferredBackend: PreferredBackend.gpu,
     );
+    // Permanent facts about the user, so the brain knows them in every session.
+    final mem = MemoryStore.summaryForPrompt();
+    final memLine = mem.isEmpty
+        ? ''
+        : "\n\nThings you already know about the user (use them naturally): $mem.";
     // Concise by default (spoken replies + on-device speed), but allowed to
     // give a short real explanation when the user asks it to explain or teach.
     _chat = await _model!.createChat(
@@ -156,8 +163,19 @@ class GemmaService {
           "refer back to it naturally. Speak in a natural, spoken style — "
           "usually one or two sentences, but give a clear, helpful explanation "
           "(a few short sentences) when the user asks you to explain, teach, or "
-          "compare something. Never use markdown, bullet points, or emojis.",
+          "compare something. Never use markdown, bullet points, or emojis.$memLine",
     );
+  }
+
+  /// Teach the live chat a new fact mid-session (it's also persisted by
+  /// MemoryStore and baked into the system prompt on the next load).
+  static Future<void> noteFact(String fact) async {
+    final chat = _chat;
+    if (chat == null || fact.trim().isEmpty) return;
+    try {
+      await chat.addQueryChunk(
+          Message.text(text: 'Note to remember about the user: $fact', isUser: false));
+    } catch (_) {}
   }
 
   /// Replay prior conversation turns into the chat so the brain remembers the

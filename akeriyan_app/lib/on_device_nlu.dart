@@ -117,6 +117,61 @@ class OnDeviceNlu {
       };
     }
 
+    // ================= LONG-TERM MEMORY (facts about you) =================
+    // recall
+    if (RegExp(r'\bwhat do you (remember|know) about me\b').hasMatch(t) ||
+        t == 'what do you remember') {
+      return {'intent': 'memory_recall', 'slots': {}, 'speak': ''};
+    }
+    // forget everything
+    if (RegExp(r'\bforget (everything|what you know|all)\b').hasMatch(t) &&
+        t.contains('me')) {
+      return {'intent': 'memory_forget', 'slots': {}, 'speak': ''};
+    }
+    // explicit: "remember that I trade gold" (but NOT "remember to …")
+    final rememberThat =
+        RegExp(r'^(?:please\s+)?remember (?:that |this[: ]|)(.+)$').firstMatch(t);
+    if (rememberThat != null && !t.startsWith('remember to')) {
+      return {
+        'intent': 'memory_add',
+        'slots': {'fact': _asFact(rememberThat.group(1)!)},
+        'speak': '',
+      };
+    }
+    // "my name is Alex"
+    final nameIs = RegExp(r'\bmy name is (.+)$').firstMatch(t);
+    if (nameIs != null) {
+      final name = _titleCase(nameIs.group(1)!.trim());
+      return {
+        'intent': 'memory_add',
+        'slots': {'fact': 'Your name is $name'},
+        'speak': "Nice to meet you, $name. I'll remember that.",
+      };
+    }
+    // "I live in Chennai" / "I'm from Chennai"
+    final liveIn =
+        RegExp(r"\bi(?:'?m| am)? (?:live in|from|based in|stay in) (.+)$")
+            .firstMatch(t);
+    if (liveIn != null) {
+      return {
+        'intent': 'memory_add',
+        'slots': {'fact': 'You live in ${_titleCase(liveIn.group(1)!.trim())}'},
+        'speak': '',
+      };
+    }
+    // "I work as a teacher" / "my job is …"
+    final jobIs = RegExp(
+            r'\b(?:i work as|i work at|my job is|my profession is)\s+(.+)$')
+        .firstMatch(t);
+    if (jobIs != null) {
+      return {
+        'intent': 'memory_add',
+        'slots': {'fact': 'You work as ${jobIs.group(1)!.trim()}'},
+        'speak': '',
+      };
+    }
+    // ====================================================================
+
     // ================= SYSTEM ACTIONS (Batch 4) =================
     // alarm: "set an alarm for 7am", "wake me up at 6:30"
     if (RegExp(r'\balarm\b').hasMatch(t) ||
@@ -543,6 +598,25 @@ class OnDeviceNlu {
   }
 
   static String _clock() => _fmt(DateTime.now());
+
+  // ---------- long-term memory helpers ----------
+  /// Rewrite a first-person fact into second person so it reads back naturally
+  /// ("i trade gold" -> "You trade gold").
+  static String _asFact(String s) {
+    s = s.trim();
+    s = s.replaceAll(RegExp(r"^i'?m\b", caseSensitive: false), "You're");
+    s = s.replaceAll(RegExp(r'^i\s+', caseSensitive: false), 'You ');
+    s = s.replaceAll(RegExp(r'\bmy\b', caseSensitive: false), 'your');
+    s = s.replaceAll(RegExp(r"\bi'?m\b", caseSensitive: false), "you're");
+    s = s.replaceAll(RegExp(r'\bme\b', caseSensitive: false), 'you');
+    if (s.isEmpty) return s;
+    return s[0].toUpperCase() + s.substring(1);
+  }
+
+  static String _titleCase(String s) => s
+      .split(RegExp(r'\s+'))
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+      .join(' ');
 
   // ---------- calculator (safe, no eval) ----------
   static String calculate(String expression) {
