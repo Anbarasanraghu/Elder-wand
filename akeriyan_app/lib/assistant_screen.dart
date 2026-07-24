@@ -624,6 +624,12 @@ class _AssistantScreenState extends State<AssistantScreen>
               MaterialPageRoute(
                   builder: (_) => const ScanScreen(startOcr: true)));
         }
+      case 'set_mode':
+        final m = slots['mode'] as String;
+        await GemmaService.setMode(m);
+        speak = m == 'trading'
+            ? "Trading mode on — I'm focused on forex and gold now."
+            : "Back to general mode.";
       case 'vision_ask':
         speak = await _askPhoto(slots['question'] as String? ?? '');
       case 'battery':

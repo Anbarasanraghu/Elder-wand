@@ -173,6 +173,16 @@ class OnDeviceNlu {
     // ====================================================================
 
     // ================= SYSTEM ACTIONS (Batch 4) =================
+    // brain persona: trading vs general
+    if (RegExp(r'\b(trading|trader|forex|gold|scalp) mode\b').hasMatch(t) ||
+        RegExp(r'\b(switch to|go to|enter|enable) (trading|forex)\b').hasMatch(t)) {
+      return {'intent': 'set_mode', 'slots': {'mode': 'trading'}, 'speak': ''};
+    }
+    if (RegExp(r'\b(normal|general|assistant|default|chat) mode\b').hasMatch(t) ||
+        RegExp(r'\b(switch to|go to|back to) (normal|general)\b').hasMatch(t) ||
+        RegExp(r'\b(exit|leave|turn off) (trading|forex) mode\b').hasMatch(t)) {
+      return {'intent': 'set_mode', 'slots': {'mode': 'general'}, 'speak': ''};
+    }
     // open the full app ("open our space") — from the floating overlay
     if (RegExp(r'\bopen (our space|the app|the assistant|elder wand|you|yourself|full app)\b')
             .hasMatch(t) ||

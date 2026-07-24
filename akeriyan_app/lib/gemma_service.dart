@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:flutter_gemma_litertlm/flutter_gemma_litertlm.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'memory_store.dart';
 
@@ -141,6 +142,46 @@ class GemmaService {
     download.value = const GemmaDownload();
   }
 
+  /// Current brain persona: 'general' or 'trading'. Same base model, different
+  /// system instruction — a lightweight, instant "trading model" without a
+  /// second download. (A real fine-tuned trading LoRA can later swap in here.)
+  static String mode = 'general';
+
+  /// Build the system instruction for the active [mode], plus the user's facts.
+  static Future<String> _systemInstruction() async {
+    final p = await SharedPreferences.getInstance();
+    mode = p.getString('brain_mode') ?? 'general';
+    final mem = MemoryStore.summaryForPrompt();
+    final memLine = mem.isEmpty
+        ? ''
+        : "\n\nThings you already know about the user (use them naturally): $mem.";
+    final base = mode == 'trading'
+        ? "You are Elder Wand in Trading mode — a sharp forex and gold (XAU/USD) "
+            "trading analyst. Think and talk in terms of trend, support and "
+            "resistance, EMA, MACD and Bollinger Bands, clean entries, stop-loss, "
+            "take-profit and risk management. Be concise and practical in a "
+            "natural spoken style, one to three short sentences. Never promise "
+            "profits; flag risk when it matters. No markdown, lists or emojis."
+        : "You are Elder Wand, the user's sharp, friendly personal assistant, "
+            "in the spirit of JARVIS. You remember the ongoing conversation and "
+            "refer back to it naturally. Speak in a natural, spoken style — "
+            "usually one or two sentences, but give a clear, helpful explanation "
+            "(a few short sentences) when the user asks you to explain, teach, or "
+            "compare something. Never use markdown, bullet points, or emojis.";
+    return base + memLine;
+  }
+
+  static Future<void> _openChat() async {
+    _chat = await _model!.createChat(
+      temperature: 0.7,
+      topK: 40,
+      topP: 0.9,
+      maxOutputTokens: 220,
+      supportImage: true, // let the brain read photos (Gemma 4 is multimodal)
+      systemInstruction: await _systemInstruction(),
+    );
+  }
+
   /// Load the active model into memory + open a chat. GPU-accelerated.
   /// A larger [maxTokens] context lets the chat remember more of the ongoing
   /// conversation (ChatGPT-style memory) across turns in a session.
@@ -150,27 +191,16 @@ class GemmaService {
       maxTokens: maxTokens,
       preferredBackend: PreferredBackend.gpu,
     );
-    // Permanent facts about the user, so the brain knows them in every session.
-    final mem = MemoryStore.summaryForPrompt();
-    final memLine = mem.isEmpty
-        ? ''
-        : "\n\nThings you already know about the user (use them naturally): $mem.";
-    // Concise by default (spoken replies + on-device speed), but allowed to
-    // give a short real explanation when the user asks it to explain or teach.
-    _chat = await _model!.createChat(
-      temperature: 0.7,
-      topK: 40,
-      topP: 0.9,
-      maxOutputTokens: 220,
-      supportImage: true, // let the brain read photos (Gemma 4 is multimodal)
-      systemInstruction:
-          "You are Elder Wand, the user's sharp, friendly personal assistant, "
-          "in the spirit of JARVIS. You remember the ongoing conversation and "
-          "refer back to it naturally. Speak in a natural, spoken style — "
-          "usually one or two sentences, but give a clear, helpful explanation "
-          "(a few short sentences) when the user asks you to explain, teach, or "
-          "compare something. Never use markdown, bullet points, or emojis.$memLine",
-    );
+    await _openChat();
+  }
+
+  /// Switch persona (general <-> trading). Keeps the model loaded and just
+  /// reopens the chat with the new system instruction — fast, no re-download.
+  static Future<void> setMode(String m) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('brain_mode', m);
+    mode = m;
+    if (_model != null) await _openChat();
   }
 
   /// Teach the live chat a new fact mid-session (it's also persisted by

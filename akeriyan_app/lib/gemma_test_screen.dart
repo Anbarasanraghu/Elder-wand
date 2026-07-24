@@ -130,6 +130,18 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
     return m > 0 ? '${m}m ${sec}s' : '${sec}s';
   }
 
+  Widget _modeBtn(String label, String m) {
+    final active = GemmaService.mode == m;
+    return active
+        ? FilledButton(onPressed: null, child: Text(label))
+        : OutlinedButton(
+            onPressed: () async {
+              await GemmaService.setMode(m);
+              if (mounted) setState(() {});
+            },
+            child: Text(label));
+  }
+
   Widget _stat(String label, String value) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -221,6 +233,37 @@ class _GemmaTestScreenState extends State<GemmaTestScreen> {
         children: [
           Text(_status),
           const SizedBox(height: 16),
+
+          // ---- Brain mode (persona switch) ----
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Brain mode',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Same model, switchable persona. Trading mode makes it a '
+                    'focused forex & gold analyst. You can also say "trading '
+                    'mode" or "general mode".',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: _modeBtn('General', 'general')),
+                      const SizedBox(width: 8),
+                      Expanded(child: _modeBtn('Trading', 'trading')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
 
           // ---- Download card ----
           Card(
