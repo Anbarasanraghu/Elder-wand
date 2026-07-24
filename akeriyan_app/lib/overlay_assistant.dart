@@ -20,16 +20,23 @@ class OverlayAssistant {
 
   static Future<bool> isActive() => FlutterOverlayWindow.isActive();
 
-  /// Show the floating panel (top of the screen). Safe to call repeatedly.
+  /// Show the floating panel pinned to the TOP of the screen. Always closes any
+  /// stale window first so it can't get stuck off-screen (a dragged/auto
+  /// position previously placed it above the top edge, making it invisible).
   static Future<void> show() async {
-    if (await FlutterOverlayWindow.isActive()) return;
+    try {
+      if (await FlutterOverlayWindow.isActive()) {
+        await FlutterOverlayWindow.closeOverlay();
+      }
+    } catch (_) {}
     await FlutterOverlayWindow.showOverlay(
-      height: 460,
+      height: 520,
       width: WindowSize.matchParent,
       alignment: OverlayAlignment.topCenter,
       flag: OverlayFlag.defaultFlag, // focusable so it can show over apps
-      enableDrag: true,
-      positionGravity: PositionGravity.auto,
+      enableDrag: false, // don't let it be dragged off-screen
+      positionGravity: PositionGravity.none,
+      startPosition: const OverlayPosition(0, 0), // pin to the very top
       overlayTitle: 'Elder Wand',
     );
   }
