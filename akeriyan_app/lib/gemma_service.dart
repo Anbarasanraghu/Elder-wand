@@ -141,7 +141,18 @@ class GemmaService {
       maxTokens: maxTokens,
       preferredBackend: PreferredBackend.gpu,
     );
-    _chat = await _model!.createChat(temperature: 0.6, topK: 40, topP: 0.9);
+    // Keep replies short + capped — the single biggest on-device speed win
+    // (fewer generated tokens = far less wait), and it suits spoken answers.
+    _chat = await _model!.createChat(
+      temperature: 0.6,
+      topK: 40,
+      topP: 0.9,
+      maxOutputTokens: 120,
+      systemInstruction:
+          'You are Elder Wand, a friendly voice assistant. Reply in ONE or '
+          'TWO short spoken sentences — concise and natural. No lists, no '
+          'markdown.',
+    );
   }
 
   /// Stream a reply token-by-token. Throws if the model isn't loaded.
