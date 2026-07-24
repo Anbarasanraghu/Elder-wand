@@ -955,41 +955,11 @@ class _AssistantScreenState extends State<AssistantScreen>
   Future<void> _runCommand(String text) async {
     if (_thinking || _recording) return;
     await _wake.stop();
-    setState(() {
-      _wakeActive = false;
-      _thinking = true;
-      _heard = '"$text"';
-      _response = '';
-    });
-    try {
-      final nlu = await _dio.post(
-        '${widget.backendUrl}/v1/nlu/parse',
-        data: await _nluBody(text),
-        options: Options(headers: {'Authorization': 'Bearer ${widget.token}'}),
-      );
-      String speak = (nlu.data['speak'] as String?) ?? '';
-      final intent = nlu.data['intent'] as String?;
-      final slots = (nlu.data['slots'] as Map?) ?? {};
-      final actions = nlu.data['actions'] as List?;
-      if (intent == 'multi' && actions != null && actions.isNotEmpty) {
-        for (final a in actions) {
-          final m = a as Map;
-          await _handleIntent(m['intent'] as String?,
-              (m['slots'] as Map?) ?? {}, (m['speak'] as String?) ?? '');
-        }
-      } else {
-        speak = await _handleIntent(intent, slots, speak);
-      }
-      setState(() => _response = speak);
-      HistoryStore.add(
-          youSaid: text, akeriyanSaid: speak, intent: intent ?? 'unknown');
-      await TtsService.speakLocal(speak);
-    } catch (e) {
-      setState(() => _heard = 'Error: $e');
-    } finally {
-      setState(() => _thinking = false);
-      await _resumeWake();
-    }
+    setState(() => _wakeActive = false);
+    // Same on-device-first flow as a spoken command: OnDeviceNlu → on-device
+    // skills → Gemma → backend. This is why chip taps now answer things like
+    // currency/crypto on the phone instead of falling through to the server.
+    await _finishTurn(text, 'en');
   }
 
   OrbState get _orbState {

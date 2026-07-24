@@ -233,16 +233,18 @@ class OnDeviceNlu {
         'speak': '',
       };
     }
-    // currency rate: "dollar to rupee rate", "euro to dollar exchange"
-    final rateM = RegExp('\\b$curPat\\s+(?:to|in|against)\\s+$curPat\\b').firstMatch(t);
-    if (rateM != null && (t.contains('rate') || t.contains('exchange'))) {
+    // currency rate: "dollar to rupee", "usd/inr", "euro vs dollar rate"
+    final rateM = RegExp(
+            '\\b$curPat(?:\\s+(?:to|in|vs|versus|against)\\s+|\\s*/\\s*)$curPat\\b')
+        .firstMatch(t);
+    if (rateM != null) {
       return {
         'intent': 'currency_rate',
         'slots': {'from': rateM.group(1)!, 'to': rateM.group(2)!},
         'speak': '',
       };
     }
-    if (RegExp(r'\b(dollar|usd) (rate|value)\b').hasMatch(t)) {
+    if (RegExp(r'\b(dollar|usd) (rate|value|price)\b').hasMatch(t)) {
       return {
         'intent': 'currency_rate',
         'slots': {'from': 'dollar', 'to': 'rupee'},
