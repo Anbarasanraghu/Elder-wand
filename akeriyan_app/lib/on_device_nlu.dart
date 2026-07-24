@@ -540,20 +540,19 @@ class OnDeviceNlu {
       };
     }
 
-    // ---- time (always from the device clock, never guessed) ----
-    if (RegExp(r'\btime\b').hasMatch(t) &&
-        RegExp(r'\b(what|whats|current|now|tell|the|is it)\b').hasMatch(t)) {
-      return {'intent': 'smalltalk', 'slots': {}, 'speak': 'It is ${_clock()}.'};
-    }
-    // ---- date / day / year / month (from the device clock) ----
-    if (RegExp(r'\b(date|today|todays|day|year|month)\b').hasMatch(t) &&
-        RegExp(r"\b(what|what'?s|whats|which|current|tell me|today|todays|is it|of the)\b")
+    // ---- date & time (comprehensive, always from the device clock) ----
+    if (RegExp(r'\b(time|date|day|year|month|week|fortnight|today|tomorrow|yesterday|tonight|weekend|leap|noon|midnight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b')
+            .hasMatch(t) &&
+        RegExp(r"\b(what|what'?s|whats|which|when|current|now|tell me|tell|is it|is today|how many|how much|day of|week of|next|last|previous|this|coming|upcoming|after|before|ago|back|from now|in \d|\d+ (?:day|week|month|year|hour|minute|fortnight))\b")
             .hasMatch(t) &&
         !t.contains('remind') &&
-        !t.contains('birthday') &&
         !t.contains('timer') &&
+        !t.contains('birthday') &&
         !RegExp(r'\bdays (until|till|to)\b').hasMatch(t)) {
-      return {'intent': 'smalltalk', 'slots': {}, 'speak': _dateSpoken(t)};
+      final ans = _dateTimeAnswer(t);
+      if (ans != null) {
+        return {'intent': 'smalltalk', 'slots': {}, 'speak': ans};
+      }
     }
 
     // ---- greeting ----
@@ -653,7 +652,6 @@ class OnDeviceNlu {
     return '$h12:${d.minute.toString().padLeft(2, '0')} $ap';
   }
 
-  static String _clock() => _fmt(DateTime.now());
 
   static const _weekdays = [
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
@@ -663,52 +661,234 @@ class OnDeviceNlu {
     'September', 'October', 'November', 'December'
   ];
 
-  /// Spoken current date from the device clock — answers year/month/day/date.
-  static String _dateSpoken(String t) {
-    final n = DateTime.now();
-    final dow = _weekdays[n.weekday - 1];
-    final mon = _monthNames[n.month - 1];
-    final d = n.day;
-    final suffix = (d >= 11 && d <= 13)
-        ? 'th'
-        : d % 10 == 1
-            ? 'st'
-            : d % 10 == 2
-                ? 'nd'
-                : d % 10 == 3
-                    ? 'rd'
-                    : 'th';
+  // ---------- date & time engine ----------
+  static bool _isBack(String t) =>
+      RegExp(r'\b(back|ago|before|earlier|prior|last|previous)\b').hasMatch(t);
+
+  static String _ord(int d) => (d >= 11 && d <= 13)
+      ? 'th'
+      : d % 10 == 1
+          ? 'st'
+          : d % 10 == 2
+              ? 'nd'
+              : d % 10 == 3
+                  ? 'rd'
+                  : 'th';
+
+  static String _fmtDate(DateTime n) =>
+      '${_weekdays[n.weekday - 1]}, ${_monthNames[n.month - 1]} '
+      '${n.day}${_ord(n.day)}, ${n.year}';
+
+  static DateTime _dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  static DateTime _addMonths(DateTime d, int months) {
+    var y = d.year;
+    var m = d.month + months;
+    while (m > 12) {
+      m -= 12;
+      y++;
+    }
+    while (m < 1) {
+      m += 12;
+      y--;
+    }
+    final lastDay = DateTime(y, m + 1, 0).day;
+    return DateTime(y, m, d.day > lastDay ? lastDay : d.day);
+  }
+
+  static int _weekOfYear(DateTime d) {
+    final firstDay = DateTime(d.year, 1, 1);
+    final days = d.difference(firstDay).inDays;
+    return ((days + firstDay.weekday - 1) / 7).floor() + 1;
+  }
+
+  static int? _monthIn(String t) {
+    for (var i = 0; i < 12; i++) {
+      if (t.contains(_monthNames[i].toLowerCase())) return i + 1;
+    }
+    return null;
+  }
+
+  static int? _weekdayIn(String t) {
+    for (var i = 0; i < 7; i++) {
+      if (RegExp('\\b${_weekdays[i].toLowerCase()}\\b').hasMatch(t)) return i + 1;
+    }
+    return null;
+  }
+
+  static DateTime _resolveWeekday(DateTime now, int wd, String t) {
+    if (RegExp(r'\b(last|previous)\b').hasMatch(t)) {
+      var d = (now.weekday - wd) % 7;
+      if (d <= 0) d += 7;
+      return now.subtract(Duration(days: d));
+    }
+    var d = (wd - now.weekday) % 7;
+    if (d < 0) d += 7;
+    if (t.contains('next') && d == 0) d = 7; // "next Monday" when today is Monday
+    return now.add(Duration(days: d));
+  }
+
+  /// Comprehensive date/time answers from the device clock. Returns null if the
+  /// text isn't actually a date/time question (so Gemma can handle it).
+  static String? _dateTimeAnswer(String t) {
+    final now = DateTime.now();
+    final back = _isBack(t);
+
+    // ===== TIME =====
+    if (RegExp(r'\btime\b').hasMatch(t)) {
+      final hm = RegExp(r'(\d+)\s*hours?').firstMatch(t);
+      final mm = RegExp(r'(\d+)\s*minutes?').firstMatch(t);
+      if (hm != null || mm != null) {
+        final mins = (hm != null ? int.parse(hm.group(1)!) * 60 : 0) +
+            (mm != null ? int.parse(mm.group(1)!) : 0);
+        return 'That would be ${_fmt(now.add(Duration(minutes: back ? -mins : mins)))}.';
+      }
+      return 'It is ${_fmt(now)}.';
+    }
+    if (t.contains('noon')) return 'Noon is 12 PM.';
+    if (t.contains('midnight')) return 'Midnight is 12 AM.';
+
+    final off = RegExp(r'(\d+)\s*(day|week|fortnight|month|year)s?').firstMatch(t);
+
+    // ===== LEAP YEAR =====
+    if (RegExp(r'\bleap year\b').hasMatch(t)) {
+      final ym = RegExp(r'\b(\d{4})\b').firstMatch(t);
+      final y = ym != null ? int.parse(ym.group(1)!) : now.year;
+      final leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+      return '$y is ${leap ? '' : 'not '}a leap year.';
+    }
+
+    // ===== YEAR =====
     if (t.contains('year')) {
-      // numeric offset: "4 years back", "in 3 years", "5 years from now"
-      final m = RegExp(r'(\d+)\s*years?').firstMatch(t);
-      if (m != null) {
-        final k = int.parse(m.group(1)!);
-        final back = RegExp(r'\b(back|ago|before|earlier|prior)\b').hasMatch(t) ||
-            t.contains('last') ||
-            t.contains('previous');
-        return 'That would be ${back ? n.year - k : n.year + k}.';
+      if (RegExp(r'days? (?:left|remaining)').hasMatch(t)) {
+        final left =
+            DateTime(now.year, 12, 31).difference(_dayOnly(now)).inDays;
+        return '$left days left in the year.';
       }
-      if (t.contains('next')) return 'Next year is ${n.year + 1}.';
-      if (t.contains('last') || t.contains('previous')) {
-        return 'Last year was ${n.year - 1}.';
+      if (RegExp(r'day of (?:the )?year').hasMatch(t)) {
+        final doy = now.difference(DateTime(now.year, 1, 1)).inDays + 1;
+        return "It's day $doy of the year.";
       }
-      return "It's ${n.year}.";
+      if (off != null && off.group(2) == 'year') {
+        final k = int.parse(off.group(1)!);
+        return 'That would be ${back ? now.year - k : now.year + k}.';
+      }
+      if (t.contains('year after next')) return 'That would be ${now.year + 2}.';
+      if (t.contains('year before last')) return 'That would be ${now.year - 2}.';
+      if (t.contains('next')) return 'Next year is ${now.year + 1}.';
+      if (back) return 'Last year was ${now.year - 1}.';
+      return "It's ${now.year}.";
     }
+
+    // ===== days in a month =====
+    if (RegExp(r'how many days').hasMatch(t) &&
+        (t.contains('month') || _monthIn(t) != null)) {
+      var y = now.year;
+      var m = now.month;
+      final named = _monthIn(t);
+      if (named != null) {
+        m = named;
+      } else if (t.contains('next')) {
+        final d = _addMonths(now, 1);
+        m = d.month;
+        y = d.year;
+      } else if (back) {
+        final d = _addMonths(now, -1);
+        m = d.month;
+        y = d.year;
+      }
+      return '${_monthNames[m - 1]} has ${DateTime(y, m + 1, 0).day} days.';
+    }
+
+    // ===== MONTH =====
     if (t.contains('month')) {
+      if (off != null && off.group(2) == 'month') {
+        final k = int.parse(off.group(1)!);
+        final d = _addMonths(now, back ? -k : k);
+        return 'That would be ${_monthNames[d.month - 1]} ${d.year}.';
+      }
       if (t.contains('next')) {
-        final m = n.month == 12 ? 0 : n.month;
-        return 'Next month is ${_monthNames[m]}.';
+        return 'Next month is ${_monthNames[_addMonths(now, 1).month - 1]}.';
       }
-      if (t.contains('last') || t.contains('previous')) {
-        final m = n.month == 1 ? 11 : n.month - 2;
-        return 'Last month was ${_monthNames[m]}.';
+      if (back) {
+        return 'Last month was ${_monthNames[_addMonths(now, -1).month - 1]}.';
       }
-      return "It's $mon ${n.year}.";
+      return "It's ${_monthNames[now.month - 1]} ${now.year}.";
     }
+
+    // ===== relative target day / date =====
+    DateTime? target;
+    if (t.contains('day after tomorrow')) {
+      target = now.add(const Duration(days: 2));
+    } else if (t.contains('day before yesterday')) {
+      target = now.subtract(const Duration(days: 2));
+    } else if (t.contains('tomorrow')) {
+      target = now.add(const Duration(days: 1));
+    } else if (t.contains('yesterday')) {
+      target = now.subtract(const Duration(days: 1));
+    } else if (off != null && off.group(2) == 'day') {
+      final k = int.parse(off.group(1)!);
+      target = now.add(Duration(days: back ? -k : k));
+    } else if (off != null &&
+        (off.group(2) == 'week' || off.group(2) == 'fortnight')) {
+      final mult = off.group(2) == 'fortnight' ? 14 : 7;
+      final k = int.parse(off.group(1)!);
+      target = now.add(Duration(days: (back ? -k : k) * mult));
+    } else if (RegExp(r'\bnext week\b').hasMatch(t)) {
+      target = now.add(const Duration(days: 7));
+    } else if (RegExp(r'\blast week\b').hasMatch(t)) {
+      target = now.subtract(const Duration(days: 7));
+    }
+
+    final wd = _weekdayIn(t);
+    if (wd != null && target == null) {
+      if (RegExp(r'\bis (it|today)\b').hasMatch(t)) {
+        final today = _weekdays[now.weekday - 1];
+        return now.weekday == wd
+            ? 'Yes, today is $today.'
+            : 'No, today is $today.';
+      }
+      target = _resolveWeekday(now, wd, t);
+    }
+
+    if (target != null) {
+      final wantsDay = RegExp(r'\bday\b').hasMatch(t) && !t.contains('date');
+      if (wd != null) {
+        final v = target.isBefore(_dayOnly(now)) ? 'was' : 'is';
+        return 'That $v ${_fmtDate(target)}.';
+      }
+      if (wantsDay) {
+        final v = target.isBefore(now) ? 'was' : 'will be';
+        return 'That $v ${_weekdays[target.weekday - 1]}.';
+      }
+      final v = target.isBefore(now) ? 'was' : 'will be';
+      return 'That $v ${_fmtDate(target)}.';
+    }
+
+    // ===== weekend? =====
+    if (t.contains('weekend')) {
+      final w = now.weekday;
+      return (w == 6 || w == 7)
+          ? "Yes, it's the weekend."
+          : "No, it's a weekday.";
+    }
+
+    // ===== week number =====
+    if (t.contains('week')) {
+      return "It's week ${_weekOfYear(now)} of the year.";
+    }
+
+    // ===== plain day of week =====
     if (RegExp(r'\bday\b').hasMatch(t) && !t.contains('date')) {
-      return "It's $dow.";
+      return "It's ${_weekdays[now.weekday - 1]}.";
     }
-    return "It's $dow, $mon $d$suffix, ${n.year}.";
+
+    // ===== date today =====
+    if (t.contains('date') || t.contains('today') || t.contains('tonight')) {
+      return "It's ${_fmtDate(now)}.";
+    }
+
+    return null;
   }
 
   // ---------- long-term memory helpers ----------
