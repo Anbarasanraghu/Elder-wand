@@ -569,7 +569,8 @@ class _AssistantScreenState extends State<AssistantScreen>
 
   /// Given recognized [text], understand + respond — on-device Gemma for plain
   /// chat, backend for actions — then speak. Shared by both STT paths.
-  Future<void> _finishTurn(String text, String lang) async {
+  Future<void> _finishTurn(String text, String lang,
+      {bool followUp = true}) async {
     bool spoke = false;
     setState(() {
       _thinking = true;
@@ -654,7 +655,9 @@ class _AssistantScreenState extends State<AssistantScreen>
     } finally {
       _autoStop?.cancel();
       setState(() => _thinking = false);
-      if (spoke) {
+      // Continuous conversation only after a spoken turn. Chip taps
+      // (followUp:false) answer once and return straight to wake listening.
+      if (spoke && followUp) {
         await _listenForFollowUp();
       } else {
         await _resumeWake();
@@ -984,7 +987,9 @@ class _AssistantScreenState extends State<AssistantScreen>
     // Same on-device-first flow as a spoken command: OnDeviceNlu → on-device
     // skills → Gemma → backend. This is why chip taps now answer things like
     // currency/crypto on the phone instead of falling through to the server.
-    await _finishTurn(text, 'en');
+    // followUp:false — a chip is one-shot, so _finishTurn returns straight to
+    // wake listening instead of opening the mic for a continuous follow-up.
+    await _finishTurn(text, 'en', followUp: false);
   }
 
   OrbState get _orbState {
