@@ -30,13 +30,12 @@ class OverlayAssistant {
       }
     } catch (_) {}
     await FlutterOverlayWindow.showOverlay(
-      height: 150, // slim bar — keep the window short so it doesn't block taps
+      height: 340, // room for the glass card + its floating corner buttons
       width: WindowSize.matchParent,
-      alignment: OverlayAlignment.topCenter,
+      alignment: OverlayAlignment.bottomCenter, // sit at the BOTTOM
       flag: OverlayFlag.defaultFlag, // focusable so it can show over apps
-      enableDrag: false, // don't let it be dragged off-screen
+      enableDrag: false,
       positionGravity: PositionGravity.none,
-      startPosition: const OverlayPosition(0, 0), // pin to the very top
       overlayTitle: 'Elder Wand',
     );
   }
