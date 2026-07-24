@@ -25,8 +25,14 @@ class OpenWakeWordService {
   static const int _melMaxLen = 970; // 10 * 97
   static const int _featMaxLen = 120;
 
-  /// Detection threshold (0..1). Tunable — lower = more sensitive.
-  static double threshold = 0.5;
+  /// Detection threshold (0..1). Higher = fewer false triggers on background
+  /// noise/voices (but you must say it a bit more clearly).
+  static double threshold = 0.6;
+
+  /// The score must stay above [threshold] for this many consecutive frames
+  /// (~80 ms each) before it wakes — rejects split-second noise spikes.
+  static const int _requiredHits = 2;
+  static int _hits = 0;
 
   static Interpreter? _mel, _emb, _wake;
   static bool _initialized = false;
@@ -121,9 +127,16 @@ class OpenWakeWordService {
         _dbgEmbMax = -1e9;
       }
       if (score > threshold) {
-        debugPrint('[OWW] WAKE! score=${score.toStringAsFixed(3)}');
-        _woken = true;
-        _fireWake();
+        // Require a few consecutive above-threshold frames so a brief noise
+        // spike doesn't trigger a wake.
+        if (++_hits >= _requiredHits) {
+          debugPrint('[OWW] WAKE! score=${score.toStringAsFixed(3)}');
+          _hits = 0;
+          _woken = true;
+          _fireWake();
+        }
+      } else {
+        _hits = 0;
       }
     }
   }
