@@ -1,17 +1,19 @@
-from faster_whisper import WhisperModel
-
-# "small" = good accuracy for Indian-accented English on CPU.
-# If your PC is slow, change "small" to "base" (faster, slightly less accurate).
+# NOTE: STT is now done ON-DEVICE (the phone's speech_to_text), so this backend
+# Whisper path is optional. `faster_whisper` is imported LAZILY so the backend
+# runs (and free-hosts) fine WITHOUT the heavy STT dependency installed; the
+# /stt endpoint only needs it if you actually call it locally.
 _MODEL_SIZE = "small"
 
 _model = None
 
 
-def get_model() -> WhisperModel:
-    """Load the model once and reuse it (first call downloads it)."""
+def get_model():
+    """Load the model once and reuse it (first call downloads it).
+    Raises ImportError if faster-whisper isn't installed (STT is on-device now)."""
     global _model
     if _model is None:
-        print(f"[AKERIYAN] Loading Whisper model '{_MODEL_SIZE}'... (first time downloads it)")
+        from faster_whisper import WhisperModel  # lazy — optional on the server
+        print(f"[AKERIYAN] Loading Whisper model '{_MODEL_SIZE}'...")
         _model = WhisperModel(_MODEL_SIZE, device="cpu", compute_type="int8")
         print("[AKERIYAN] Whisper model ready.")
     return _model

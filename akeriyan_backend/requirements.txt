@@ -1,12 +1,21 @@
 # AKERIYAN backend — all free / open-source, no paid API keys.
+# LIGHT set: safe to deploy on a free cloud host (Render / Railway / Fly).
+# The heavy AI models are NO LONGER here — they run on the phone:
+#   • LLM  -> on-device Gemma (flutter_gemma)
+#   • STT  -> on-device speech_to_text
+#   • TTS  -> on-device phone voice
+# So this backend is just the light feature-skills (weather/news/markets/…).
+
 fastapi>=0.111
 uvicorn[standard]>=0.30
 pydantic-settings>=2.2
 python-multipart>=0.0.9
 
-# Speech-to-text (free, local)
-faster-whisper>=1.0.3
-
-# HTTP for the free skills (Ollama, Open-Meteo, Google News, DuckDuckGo)
+# HTTP for the free skills (Open-Meteo, Google News, DuckDuckGo, markets, …)
 httpx>=0.27
 pypdf
+
+# ── Optional heavy extras (NOT needed for the hosted backend) ──────────────
+# Install only if you want the OLD on-server Whisper STT locally. STT is now
+# on-device, so leave this OUT for free hosting.
+#   faster-whisper>=1.0.3

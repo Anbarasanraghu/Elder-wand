@@ -1,0 +1,20 @@
+# Render blueprint — deploy the LIGHT Elder Wand backend on the FREE tier.
+# In Render: New + → Blueprint → connect this GitHub repo; it reads this file.
+services:
+  - type: web
+    name: elder-wand-backend
+    runtime: python
+    plan: free
+    rootDir: akeriyan_backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      # Render generates a strong token — copy it into the app's Device Token.
+      - key: DEVICE_TOKEN
+        generateValue: true
+      # No Ollama on the host, so understanding uses the fast keyword rules.
+      - key: LLM_ENABLED
+        value: "false"
