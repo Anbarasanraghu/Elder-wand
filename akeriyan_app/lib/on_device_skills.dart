@@ -210,8 +210,8 @@ class OnDeviceSkills {
 
   static String curCode(String w) {
     w = w.toLowerCase().trim();
-    if (w.startsWith('dollar')) return 'USD';
-    if (w.startsWith('rupee')) return 'INR';
+    if (w.startsWith('dollar') || w.startsWith('buck')) return 'USD';
+    if (w.startsWith('rupee') || w == 'rs') return 'INR';
     if (w.startsWith('euro')) return 'EUR';
     if (w.startsWith('pound')) return 'GBP';
     if (w == 'yen') return 'JPY';

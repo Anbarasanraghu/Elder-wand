@@ -1,3 +1,5 @@
+import 'on_device_skills.dart';
+
 /// On-device command understanding — a Dart port of the backend's fast rules,
 /// for the intents the PHONE can fully handle without the server. Returns an
 /// {intent, slots, speak} map, or null for anything that should go to the
@@ -218,29 +220,44 @@ class OnDeviceNlu {
     // =================================================================
 
     // ================= FINANCE (free APIs, on-device) =================
-    const curPat = r'(dollars?|rupees?|euros?|pounds?|yen|usd|inr|eur|gbp|jpy)';
-    // currency convert: "convert 20 dollars to rupees", "20 usd in inr"
-    final conv = RegExp('\\b(?:convert\\s+)?(\\d+(?:\\.\\d+)?)\\s*$curPat\\s+(?:to|in|into)\\s+$curPat\\b')
-        .firstMatch(t);
-    if (conv != null) {
-      return {
-        'intent': 'currency_convert',
-        'slots': {
-          'amount': double.parse(conv.group(1)!),
-          'from': conv.group(2)!,
-          'to': conv.group(3)!,
-        },
-        'speak': '',
-      };
-    }
-    // currency rate: "dollar to rupee", "usd/inr", "euro vs dollar rate"
-    final rateM = RegExp(
-            '\\b$curPat(?:\\s+(?:to|in|vs|versus|against)\\s+|\\s*/\\s*)$curPat\\b')
-        .firstMatch(t);
-    if (rateM != null) {
+    // Currency noun, optionally preceded by a nationality adjective so
+    // "us dollars", "indian rupees", "british pounds" all parse.
+    const curNoun =
+        r'(?:dollars?|rupees?|euros?|pounds?|yen|bucks?|usd|inr|eur|gbp|jpy|aud|cad|rs)';
+    const adj =
+        r'(?:us|u\.?s\.?|american|indian|british|uk|australian|canadian|japanese|singapore)?\s*';
+    // "20 us dollars" -> amount + source currency
+    final amtM = RegExp('\\b(\\d+(?:\\.\\d+)?)\\s*$adj($curNoun)\\b').firstMatch(t);
+    // every currency mentioned, in order
+    final curList =
+        RegExp('$adj($curNoun)').allMatches(t).map((m) => m.group(1)!).toList();
+    final financeWord =
+        RegExp(r'\b(rate|convert|conversion|exchange|worth|equals?|how much)\b')
+            .hasMatch(t);
+    final isExpense = RegExp(r'\b(spent|spend|paid|budget)\b').hasMatch(t);
+    if (curList.isNotEmpty &&
+        !isExpense &&
+        (amtM != null || curList.length >= 2 || financeWord)) {
+      String otherThan(String c) => curList.firstWhere(
+            (x) => OnDeviceSkills.curCode(x) != OnDeviceSkills.curCode(c),
+            orElse: () => OnDeviceSkills.curCode(c) == 'INR' ? 'usd' : 'rupees',
+          );
+      if (amtM != null) {
+        final from = amtM.group(2)!;
+        return {
+          'intent': 'currency_convert',
+          'slots': {
+            'amount': double.parse(amtM.group(1)!),
+            'from': from,
+            'to': otherThan(from),
+          },
+          'speak': '',
+        };
+      }
+      final from = curList.first;
       return {
         'intent': 'currency_rate',
-        'slots': {'from': rateM.group(1)!, 'to': rateM.group(2)!},
+        'slots': {'from': from, 'to': otherThan(from)},
         'speak': '',
       };
     }
