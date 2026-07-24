@@ -30,7 +30,7 @@ class OverlayAssistant {
       }
     } catch (_) {}
     await FlutterOverlayWindow.showOverlay(
-      height: 520,
+      height: 150, // slim bar — keep the window short so it doesn't block taps
       width: WindowSize.matchParent,
       alignment: OverlayAlignment.topCenter,
       flag: OverlayFlag.defaultFlag, // focusable so it can show over apps
