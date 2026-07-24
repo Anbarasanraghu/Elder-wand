@@ -117,6 +117,72 @@ class OnDeviceNlu {
       };
     }
 
+    // ================= SYSTEM ACTIONS (Batch 4) =================
+    // alarm: "set an alarm for 7am", "wake me up at 6:30"
+    if (RegExp(r'\balarm\b').hasMatch(t) ||
+        RegExp(r'\bwake me( up)?\b').hasMatch(t)) {
+      final due = _parseTime(t);
+      if (due != null) {
+        var label = t
+            .replaceAll(RegExp(r'\b(set|an?|the|for|to|please|wake me up|wake me)\b'), '')
+            .replaceAll(RegExp(r'\balarm\b'), '')
+            .replaceAll(RegExp(r'\b(at\s+)?\d{1,2}([:\s]\d{2})?\s*(am|pm)?\b.*$'), '')
+            .trim();
+        return {
+          'intent': 'set_alarm',
+          'slots': {
+            'hour': due.hour,
+            'minute': due.minute,
+            'label': label.isEmpty ? null : label,
+          },
+          'speak': '',
+        };
+      }
+    }
+    // calendar: "schedule a meeting at 3pm", "add dentist to my calendar"
+    if (RegExp(r'\bcalendar\b').hasMatch(t) ||
+        RegExp(r'\b(schedule|meeting|appointment)\b').hasMatch(t)) {
+      final due = _parseTime(t) ?? _parseRelative(t);
+      if (due != null) {
+        var title = t
+            .replaceAll(
+                RegExp(r'\b(add|put|create|schedule|set up|new|make)\b'), '')
+            .replaceAll(
+                RegExp(
+                    r'\b(a|an|the|to|on|my|in|for|with|event|meeting|appointment|reminder|calendar)\b'),
+                '')
+            .replaceAll(
+                RegExp(r'\b(at\s+)?\d{1,2}([:\s]\d{2})?\s*(am|pm)\b.*$'), '')
+            .replaceAll(RegExp(r'\bin \d+(\.\d+)? (minutes?|hours?)\b.*$'), '')
+            .replaceAll(RegExp(r'\b(today|tonight|tomorrow|next \w+)\b'), '')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+        if (title.isEmpty) title = 'New event';
+        return {
+          'intent': 'calendar_event',
+          'slots': {'title': title, 'time': due.toIso8601String()},
+          'speak': '',
+        };
+      }
+    }
+    // music: "play despacito", "play some music", "play X on spotify"
+    final music = RegExp(r'^play\s+(.+)$').firstMatch(t);
+    if (music != null) {
+      var q = music
+          .group(1)!
+          .replaceAll(
+              RegExp(r'\b(some|a|the)\s+|\b(song|songs|music|track|tune)s?\b'),
+              '')
+          .replaceAll(
+              RegExp(
+                  r'\bon (spotify|youtube( music)?|apple music|gaana|wynk|amazon music)\b'),
+              '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      return {'intent': 'play_music', 'slots': {'query': q}, 'speak': ''};
+    }
+    // ==========================================================
+
     // ================= PERSONAL DATA (all on-device) =================
     // to-do list
     final todoAdd = RegExp(

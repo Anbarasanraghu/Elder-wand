@@ -34,6 +34,9 @@ import 'gemma_service.dart';
 import 'voice_screen.dart';
 import 'on_device_skills.dart';
 import 'on_device_nlu.dart';
+import 'device_actions.dart';
+import 'api_registry.dart';
+import 'api_registry_screen.dart';
 import 'personal_store.dart';
 import 'personal_screen.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -482,6 +485,7 @@ class _AssistantScreenState extends State<AssistantScreen>
       await _resumeWake();
       return;
     }
+    ApiUsage.record('stt', live: false); // on-device STT produced this text
     await _finishTurn(text, 'en');
   }
 
@@ -542,6 +546,19 @@ class _AssistantScreenState extends State<AssistantScreen>
       case 'currency_rate':
         speak = await OnDeviceSkills.currencyRate(
             slots['from'] as String, slots['to'] as String);
+      case 'set_alarm':
+        speak = await DeviceActions.setAlarm(
+          hour: slots['hour'] as int,
+          minute: slots['minute'] as int,
+          label: slots['label'] as String?,
+        );
+      case 'calendar_event':
+        speak = await DeviceActions.addCalendarEvent(
+          title: slots['title'] as String,
+          begin: DateTime.parse(slots['time'] as String),
+        );
+      case 'play_music':
+        speak = await DeviceActions.playMusic(slots['query'] as String? ?? '');
       case 'battery':
         final b = Battery();
         final level = await b.batteryLevel;
@@ -572,6 +589,7 @@ class _AssistantScreenState extends State<AssistantScreen>
   Future<void> _finishTurn(String text, String lang,
       {bool followUp = true}) async {
     bool spoke = false;
+    ApiUsage.clearLast(); // reset the live "via …" chip for this turn
     setState(() {
       _thinking = true;
       _heard = '"$text"';
@@ -698,6 +716,7 @@ class _AssistantScreenState extends State<AssistantScreen>
     // questions through to the on-device brain even if they mention an
     // action word ("explain support and resistance", "what is a stop loss").
     if (_actionHint.hasMatch(text) && !_knowledgeQ.hasMatch(text)) return false;
+    ApiUsage.record('gemma');
     try {
       final sb = StringBuffer();
       setState(() {
@@ -1226,11 +1245,42 @@ class _AssistantScreenState extends State<AssistantScreen>
                 Text(_response,
                     style: const TextStyle(
                         fontSize: 15, color: Ak.textHi, height: 1.4)),
+                _viaChip(),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// Live "via <source>" chip — shows which API/model answered this turn, and
+  /// opens the full APIs & Abilities page on tap.
+  Widget _viaChip() {
+    return ValueListenableBuilder<ApiHit?>(
+      valueListenable: ApiUsage.last,
+      builder: (context, hit, _) {
+        if (hit == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: GestureDetector(
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const ApiRegistryScreen())),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_done_outlined, size: 13, color: Ak.silver),
+                const SizedBox(width: 5),
+                Text('via ${hit.name}',
+                    style: TextStyle(
+                        color: Ak.silver,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1244,6 +1294,8 @@ class _AssistantScreenState extends State<AssistantScreen>
           TradingScreen(backendUrl: widget.backendUrl, token: widget.token), false),
       ('On-device AI', 'Your phone brain', Icons.memory,
           const GemmaTestScreen(), true),
+      ('APIs', 'What I can access', Icons.hub_outlined,
+          const ApiRegistryScreen(), true),
       ('Memory', 'Past chats', Icons.history, const HistoryScreen(), false),
       ('Meeting', 'Record & sum up', Icons.mic_none,
           MeetingScreen(backendUrl: widget.backendUrl, token: widget.token), false),

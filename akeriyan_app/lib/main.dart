@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'assistant_screen.dart';
 import 'foreground_service.dart';
 import 'history_store.dart';
+import 'api_registry.dart';
 import 'theme.dart';
 import 'widgets/assistant_orb.dart';
 import 'widgets/gradient_border.dart';
@@ -13,6 +14,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AkeriyanForegroundService.init();
   await HistoryStore.init(); // load saved transcript (offline + survives restart)
+  await ApiUsage.init(); // load persisted API-usage counts for the APIs page
   // Register the on-device LLM engine (LiteRT-LM) for the Gemma brain.
   try {
     await GemmaService.initEngine();

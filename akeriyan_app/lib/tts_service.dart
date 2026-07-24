@@ -5,6 +5,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'api_registry.dart';
+
 /// Speaks replies with the natural offline Piper voice served by the backend
 /// (`POST /v1/tts` -> WAV), and falls back to the phone's built-in TTS when the
 /// backend is unreachable or Piper isn't available.
@@ -126,6 +128,7 @@ class TtsService {
   static Future<void> speakLocal(String text, {String lang = 'en'}) async {
     text = text.trim();
     if (text.isEmpty) return;
+    ApiUsage.record('tts', live: false);
     try {
       await _player.stop();
       if (lang != 'en') {

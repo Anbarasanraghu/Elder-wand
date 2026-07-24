@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api_registry.dart';
+
 /// Weather / news / web-search answered ENTIRELY on the phone by calling the
 /// same free, no-key public APIs the backend used (Open-Meteo, Google News RSS,
 /// DuckDuckGo). No PC, no backend needed for these.
@@ -62,6 +64,7 @@ class OnDeviceSkills {
 
   static Future<String> weather(
       {String? city, double? lat, double? lon}) async {
+    ApiUsage.record('open-meteo');
     try {
       String place;
       if ((city == null || city.isEmpty) && lat != null && lon != null) {
@@ -101,6 +104,7 @@ class OnDeviceSkills {
   }
 
   static Future<String?> _reversePlace(double lat, double lon) async {
+    ApiUsage.record('bigdatacloud');
     final j = await _getJson(
         'https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=$lat&longitude=$lon&localityLanguage=en');
     if (j == null) return null;
@@ -110,6 +114,7 @@ class OnDeviceSkills {
 
   // ---- News (Google News RSS, free) ----
   static Future<String> news({String? topic, int limit = 4}) async {
+    ApiUsage.record('google-news');
     try {
       final url = (topic != null && topic.isNotEmpty)
           ? 'https://news.google.com/rss/search?q=${Uri.encodeQueryComponent(topic)}&hl=en-IN&gl=IN&ceid=IN:en'
@@ -149,6 +154,7 @@ class OnDeviceSkills {
   static Future<String> search(String query) async {
     query = query.trim();
     if (query.isEmpty) return 'What would you like me to look up?';
+    ApiUsage.record('duckduckgo');
     try {
       final d = await _getJson(
           'https://api.duckduckgo.com/?q=${Uri.encodeQueryComponent(query)}&format=json&no_html=1&skip_disambig=1');
@@ -187,6 +193,7 @@ class OnDeviceSkills {
   };
 
   static Future<String> cryptoPrice(String coin) async {
+    ApiUsage.record('coingecko');
     final key = coin.toLowerCase().trim();
     final id = _coins[key] ?? key.replaceAll(' ', '-');
     final j = await _getJson(
@@ -222,6 +229,7 @@ class OnDeviceSkills {
 
   static Future<String> currencyConvert(
       double amount, String from, String to) async {
+    ApiUsage.record('er-api');
     from = curCode(from);
     to = curCode(to);
     final j = await _getJson('https://open.er-api.com/v6/latest/$from');
@@ -232,6 +240,7 @@ class OnDeviceSkills {
   }
 
   static Future<String> currencyRate(String from, String to) async {
+    ApiUsage.record('er-api');
     from = curCode(from);
     to = curCode(to);
     final j = await _getJson('https://open.er-api.com/v6/latest/$from');
