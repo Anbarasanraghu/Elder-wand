@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../theme.dart';
@@ -7,6 +8,7 @@ import '../sms_sender.dart';
 import '../phone_caller.dart';
 import 'crm_config.dart';
 import 'crm_service.dart';
+import 'demo_service.dart';
 import 'lead_generator_screen.dart';
 import 'outreach_sheet.dart';
 
@@ -396,9 +398,80 @@ class CrmLeadScreen extends StatefulWidget {
 
 class _CrmLeadScreenState extends State<CrmLeadScreen> {
   late String _stage = widget.lead.stage;
+  late String _demoUrl = widget.lead.demoUrl;
+  bool _demoBusy = false;
   final _note = TextEditingController();
   List<Map<String, dynamic>> _acts = [];
   List<Map<String, dynamic>> _fups = [];
+
+  Future<void> _generateDemo() async {
+    setState(() => _demoBusy = true);
+    try {
+      final url = await DemoService.generate(l);
+      setState(() => _demoUrl = url);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Demo site ready ✓')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed: $e — did you run demos_setup.sql?')));
+      }
+    }
+    if (mounted) setState(() => _demoBusy = false);
+  }
+
+  Widget _demoButton() {
+    if (_demoBusy) {
+      return const SizedBox(
+        width: double.infinity,
+        child: OutlinedButton(
+            onPressed: null,
+            child: Text('Generating demo site…',
+                style: TextStyle(color: Ak.silver))),
+      );
+    }
+    if (_demoUrl.isEmpty) {
+      return SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+              foregroundColor: Ak.purple,
+              side: BorderSide(color: Ak.purple.withValues(alpha: 0.5)),
+              padding: const EdgeInsets.symmetric(vertical: 13)),
+          onPressed: _generateDemo,
+          icon: const Icon(Icons.web),
+          label: const Text('Generate demo website'),
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: Ak.bento(radius: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.web, color: Ak.purple, size: 18),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text('Demo site ready',
+                style: TextStyle(color: Ak.textHi, fontWeight: FontWeight.w600)),
+          ),
+          _mini(Icons.open_in_new, () => launchUrl(Uri.parse(_demoUrl),
+              mode: LaunchMode.externalApplication)),
+          _mini(Icons.copy, () {
+            Clipboard.setData(ClipboardData(text: _demoUrl));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('Link copied')));
+          }),
+          _mini(Icons.refresh, _generateDemo),
+        ],
+      ),
+    );
+  }
+
+  Widget _mini(IconData i, VoidCallback onTap) => IconButton(
+      icon: Icon(i, size: 18, color: Ak.silver), onPressed: onTap);
 
   Lead get l => widget.lead;
 
@@ -468,6 +541,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
                   style: TextStyle(color: Ak.bg0, fontWeight: FontWeight.w800)),
             ),
           ),
+          const SizedBox(height: 10),
+          _demoButton(),
           const SizedBox(height: 14),
           _stageRow(),
           const SizedBox(height: 18),

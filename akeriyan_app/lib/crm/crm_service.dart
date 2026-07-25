@@ -17,6 +17,7 @@ class Lead {
   final String notes;
   final String address;
   final String category;
+  final String demoUrl;
 
   Lead({
     required this.id,
@@ -31,6 +32,7 @@ class Lead {
     this.notes = '',
     this.address = '',
     this.category = '',
+    this.demoUrl = '',
   });
 
   factory Lead.fromMap(Map<String, dynamic> m) => Lead(
@@ -46,6 +48,7 @@ class Lead {
         notes: '${m['notes'] ?? ''}',
         address: '${m['address'] ?? ''}',
         category: '${m['category'] ?? ''}',
+        demoUrl: '${m['demo_url'] ?? ''}',
       );
 }
 
@@ -107,6 +110,10 @@ class CrmService {
 
   static Future<void> setStage(String id, String stage) async {
     await _db.from('leads').update({'stage': stage}).eq('id', id);
+  }
+
+  static Future<void> setDemoUrl(String id, String url) async {
+    await _db.from('leads').update({'demo_url': url}).eq('id', id);
   }
 
   static Future<void> deleteLead(String id) async {
