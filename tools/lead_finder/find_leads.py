@@ -57,20 +57,30 @@ def overpass_query(search: str, area: str, cap: int):
     out center {cap * 3};
     """
     last = None
-    for attempt in range(4):
+    for attempt in range(6):
         ep = OVERPASS_MIRRORS[attempt % len(OVERPASS_MIRRORS)]
         try:
             r = requests.post(ep, data={"data": q}, headers=UA, timeout=90)
             if r.status_code == 429:
                 last = "429 rate-limited"
+                print(f"  [{ep}] 429, retrying…")
                 time.sleep(5 * (attempt + 1))
                 continue
             r.raise_for_status()
-            return r.json().get("elements", [])
+            els = r.json().get("elements", [])
+            print(f"  [{ep}] returned {len(els)} elements")
+            # A mirror can reply 200 with an empty set while it's busy — try
+            # another before giving up, so a transient blip doesn't add 0 leads.
+            if els:
+                return els
+            last = "empty result"
+            time.sleep(3)
         except Exception as ex:  # noqa: BLE001
             last = str(ex)
+            print(f"  [{ep}] error: {ex}")
             time.sleep(3 * (attempt + 1))
-    raise RuntimeError(f"Overpass failed after retries: {last}")
+    print(f"Overpass returned nothing after retries ({last}).")
+    return []
 
 
 def enrich_from_website(url: str):
