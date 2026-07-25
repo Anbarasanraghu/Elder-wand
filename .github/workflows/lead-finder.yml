@@ -1,0 +1,37 @@
+name: Lead Finder
+
+# Runs on GitHub's free servers — no PC, no server needed.
+on:
+  workflow_dispatch:            # run on demand from the Actions tab
+    inputs:
+      search:
+        description: "Business type / keyword (e.g. dentist, gym, cafe)"
+        required: true
+      area:
+        description: "City / area (e.g. Chennai)"
+        required: true
+      limit:
+        description: "Max leads to add"
+        required: false
+        default: "40"
+  # Uncomment to also run every morning at 07:30 UTC:
+  # schedule:
+  #   - cron: "30 7 * * *"
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r tools/lead_finder/requirements.txt
+      - name: Find leads
+        env:
+          SEARCH: ${{ inputs.search }}
+          AREA: ${{ inputs.area }}
+          LIMIT: ${{ inputs.limit }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python tools/lead_finder/find_leads.py
