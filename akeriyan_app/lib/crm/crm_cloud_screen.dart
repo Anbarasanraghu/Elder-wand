@@ -413,6 +413,8 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Demo site ready ✓')));
       }
+    } on DemoHostNotSet {
+      if (mounted) await _askDemoHost();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -420,6 +422,49 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
       }
     }
     if (mounted) setState(() => _demoBusy = false);
+  }
+
+  Future<void> _askDemoHost() async {
+    final ctrl = TextEditingController(text: await DemoService.host() ?? '');
+    if (!mounted) return;
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Ak.bg2,
+        title: const Text('Demo host', style: TextStyle(color: Ak.textHi)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'One-time: deploy the free Cloudflare worker (cloudflare/'
+              'demo-worker.js) and paste its URL here so demo links render.',
+              style: TextStyle(color: Ak.textMid, fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: ctrl,
+              style: const TextStyle(color: Ak.textHi),
+              decoration: const InputDecoration(
+                  hintText: 'https://elder-demo.you.workers.dev',
+                  hintStyle: TextStyle(color: Ak.textLo, fontSize: 12)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    if (url != null && url.isNotEmpty) {
+      await DemoService.setHost(url);
+      await _generateDemo(); // retry now that the host is set
+    }
   }
 
   Widget _demoButton() {
