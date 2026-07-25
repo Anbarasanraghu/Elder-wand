@@ -16,7 +16,7 @@ class LeadGeneratorScreen extends StatefulWidget {
 class _LeadGeneratorScreenState extends State<LeadGeneratorScreen> {
   final _search = TextEditingController();
   final _area = TextEditingController(text: 'Chennai');
-  double _target = 25;
+  double _target = 15;
   String? _runId;
   bool _running = false;
   String _summary = '';

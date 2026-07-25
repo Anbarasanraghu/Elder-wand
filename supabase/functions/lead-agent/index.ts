@@ -109,21 +109,47 @@ function categoryOf(t: Record<string, string>): string {
 async function enrich(url: string) {
   let u = url;
   if (!u.startsWith("http")) u = "http://" + u;
-  const out: { email: string; socials: Record<string, string> } = {
-    email: "",
-    socials: {},
-  };
+  const out: { email: string; phone: string; socials: Record<string, string> } =
+    { email: "", phone: "", socials: {} };
   try {
-    const r = await fetchWithTimeout(u, 8000);
+    const r = await fetchWithTimeout(u, 7000, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; ElderWand/1.0)" },
+    });
     const html = await r.text();
     const m = html.match(EMAIL);
     if (m && !/\.(png|jpg|gif|webp)$/i.test(m[0])) out.email = m[0];
+    const tel = html.match(/tel:\s*([+\d][\d\s().-]{6,})/i);
+    if (tel) out.phone = tel[1].replace(/[^\d+]/g, "");
     for (const [k, rx] of Object.entries(SOCIALS)) {
       const s = html.match(rx);
       if (s) out.socials[k] = s[0];
     }
   } catch (_) { /* site unreachable */ }
   return out;
+}
+
+// Free web search (DuckDuckGo HTML) to find a business's site when OSM has none.
+async function webSearch(query: string): Promise<string[]> {
+  try {
+    const r = await fetchWithTimeout(
+      "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query),
+      7000,
+      { headers: { "User-Agent": "Mozilla/5.0 (compatible; ElderWand/1.0)" } },
+    );
+    const html = await r.text();
+    const urls: string[] = [];
+    const re = /class="result__a"[^>]*href="([^"]+)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) !== null && urls.length < 4) {
+      let u = m[1];
+      const enc = u.match(/uddg=([^&]+)/);
+      if (enc) u = decodeURIComponent(enc[1]);
+      if (u.startsWith("http")) urls.push(u);
+    }
+    return urls;
+  } catch (_) {
+    return [];
+  }
 }
 
 Deno.serve(async (req) => {
@@ -160,13 +186,15 @@ Deno.serve(async (req) => {
 
     const rows: any[] = [];
     let validated = 0, skipped = 0;
+    const t0 = Date.now();
+    const budget = () => Date.now() - t0 < 110000; // stop enriching near timeout
     for (const el of els) {
       if (rows.length >= target) break;
       const t = el.tags ?? {};
       const name = (t.name ?? "").trim();
       if (!name) continue;
       let phone = (t.phone ?? t["contact:phone"] ?? "").trim();
-      const website = (t.website ?? t["contact:website"] ?? "").trim();
+      let website = (t.website ?? t["contact:website"] ?? "").trim();
       let email = (t.email ?? t["contact:email"] ?? "").trim();
 
       const key = `${name.toLowerCase()}|${phone}`;
@@ -176,11 +204,22 @@ Deno.serve(async (req) => {
       }
       seen.add(key);
 
+      // If OSM has no website, find one via a free web search.
+      if (!website && budget()) {
+        await log(`Searching the web for "${name}"…`, "dim");
+        const hits = await webSearch(`${name} ${area} contact`);
+        website = hits.find((h) =>
+          !/facebook|instagram|linkedin|justdial|indiamart|yelp|tripadvisor|youtube/i
+            .test(h)
+        ) ?? hits[0] ?? "";
+        await new Promise((x) => setTimeout(x, 600));
+      }
       let socials: Record<string, string> = {};
-      if (website && !email) {
-        await log(`Checking website: ${website}`, "dim");
+      if (website && budget()) {
+        await log(`Reading ${website.replace(/^https?:\/\//, "").slice(0, 40)}…`, "dim");
         const e = await enrich(website);
-        email = e.email;
+        if (!email) email = e.email;
+        if (!phone) phone = e.phone;
         socials = e.socials;
       }
 
@@ -188,7 +227,7 @@ Deno.serve(async (req) => {
       const lat = el.lat ?? el.center?.lat;
       const lon = el.lon ?? el.center?.lon;
       let address = addrFromTags(t);
-      if (!address && lat && lon) {
+      if (!address && lat && lon && budget()) {
         address = await reverseGeocode(lat, lon);
         await new Promise((x) => setTimeout(x, 1100)); // Nominatim: 1 req/sec
       }
