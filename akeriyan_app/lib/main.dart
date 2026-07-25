@@ -4,8 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'assistant_screen.dart';
 import 'foreground_service.dart';
 import 'history_store.dart';
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'api_registry.dart';
 import 'memory_store.dart';
+import 'message_agent.dart';
 import 'overlay_app.dart';
 import 'theme.dart';
 import 'widgets/assistant_orb.dart';
@@ -26,6 +28,10 @@ void main() async {
   await HistoryStore.init(); // load saved transcript (offline + survives restart)
   await ApiUsage.init(); // load persisted API-usage counts for the APIs page
   await MemoryStore.init(); // load permanent facts the assistant knows about you
+  await MessageStore.init(); // load scheduled message-agent reminders
+  try {
+    await AndroidAlarmManager.initialize(); // exact background alarms for the agent
+  } catch (_) {}
   // Register the on-device LLM engine (LiteRT-LM) for the Gemma brain.
   try {
     await GemmaService.initEngine();

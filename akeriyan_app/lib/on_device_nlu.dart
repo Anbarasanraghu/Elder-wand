@@ -183,6 +183,12 @@ class OnDeviceNlu {
         RegExp(r'\b(exit|leave|turn off) (trading|forex) mode\b').hasMatch(t)) {
       return {'intent': 'set_mode', 'slots': {'mode': 'general'}, 'speak': ''};
     }
+    // message agent: a reminder that messages a person (SMS/WhatsApp/…)
+    if ((t.contains('remind') || t.contains('reminder') || t.contains('message')) &&
+        RegExp(r'\b(whatsapp|sms|text (him|her|them|to)|message (him|her|them|agent))\b')
+            .hasMatch(t)) {
+      return {'intent': 'open_message_agent', 'slots': {}, 'speak': ''};
+    }
     // open the full app ("open our space") — from the floating overlay
     if (RegExp(r'\bopen (our space|the app|the assistant|elder wand|you|yourself|full app)\b')
             .hasMatch(t) ||

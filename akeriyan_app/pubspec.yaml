@@ -56,6 +56,9 @@ dependencies:
   audioplayers: ^6.1.0 # plays the natural Piper voice returned by the backend
   image_picker: ^1.1.2 # camera capture for the vision feature
   flutter_overlay_window: ^0.5.0 # floating assistant over other apps (like Google)
+  android_alarm_manager_plus: ^4.0.4 # exact background alarms for scheduled msgs
+  another_telephony: ^0.4.0 # auto-send SMS in the background (no tap)
+  mailer: ^6.1.0 # auto-send email via SMTP (on-device, no backend)
   mobile_scanner: ^5.2.3 # QR / barcode scanning (on-device, free)
   google_mlkit_text_recognition: ^0.13.1 # on-device OCR (free, no key)
   flutter_gemma: ^1.3.2 # on-device LLM (Gemma) — runs the AI brain on the phone

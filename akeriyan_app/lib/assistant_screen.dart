@@ -46,6 +46,7 @@ import 'memory_extractor.dart';
 import 'proactive_service.dart';
 import 'proactive_screen.dart';
 import 'scan_screen.dart';
+import 'message_agent_screen.dart';
 import 'overlay_assistant.dart';
 import 'overlay_screen.dart';
 import 'personal_store.dart';
@@ -611,6 +612,12 @@ class _AssistantScreenState extends State<AssistantScreen>
         speak = 'Opening Elder Wand.';
         _overlayActive = false;
         await OverlayAssistant.openApp();
+      case 'open_message_agent':
+        speak = 'Opening the message agent. Add who, when, and the message.';
+        if (mounted) {
+          Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const MessageAgentScreen()));
+        }
       case 'scan_qr':
         speak = 'Opening the QR scanner.';
         if (mounted) {
@@ -1416,6 +1423,8 @@ class _AssistantScreenState extends State<AssistantScreen>
           const ApiRegistryScreen(), true),
       ('About You', 'What I remember', Icons.psychology_outlined,
           const MemoryScreen(), true),
+      ('Message Agent', 'Remind & message people', Icons.forward_to_inbox,
+          const MessageAgentScreen(), true),
       ('Proactive', 'Briefing & alerts', Icons.notifications_active_outlined,
           const ProactiveScreen(), false),
       ('Scan', 'QR & text (OCR)', Icons.qr_code_scanner,
