@@ -444,7 +444,9 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
             Text(l.company, style: TextStyle(color: Ak.textMid)),
           const SizedBox(height: 12),
           _actions(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          _details(),
+          const SizedBox(height: 14),
           _stageRow(),
           const SizedBox(height: 18),
           _addNote(),
@@ -478,6 +480,79 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           _act(Icons.mail_outline, 'Email',
               () => launchUrl(Uri.parse('mailto:${l.email}'))),
       ],
+    );
+  }
+
+  Widget _details() {
+    final rows = <Widget>[];
+    void add(IconData ic, String label, String value, {VoidCallback? tap}) {
+      if (value.trim().isEmpty) return;
+      rows.add(
+        InkWell(
+          onTap: tap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(ic, size: 16, color: Ak.silver),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label,
+                          style: TextStyle(color: Ak.textLo, fontSize: 11)),
+                      const SizedBox(height: 1),
+                      Text(value,
+                          style: TextStyle(
+                              color: tap != null ? Ak.purple : Ak.textHi,
+                              fontSize: 14,
+                              height: 1.3)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    add(Icons.category_outlined, 'Category', l.category);
+    add(Icons.phone_outlined, 'Phone', l.phone,
+        tap: l.phone.isEmpty ? null : () => PhoneCaller.call(l.phone));
+    add(Icons.mail_outline, 'Email', l.email,
+        tap: l.email.isEmpty
+            ? null
+            : () => launchUrl(Uri.parse('mailto:${l.email}')));
+    add(Icons.language, 'Website', l.website, tap: l.website.isEmpty
+        ? null
+        : () => launchUrl(
+            Uri.parse(l.website.startsWith('http')
+                ? l.website
+                : 'https://${l.website}'),
+            mode: LaunchMode.externalApplication));
+    add(Icons.place_outlined, 'Address', l.address, tap: l.address.isEmpty
+        ? null
+        : () => launchUrl(Uri.parse(
+            'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(l.address)}')));
+    if (l.notes.trim().isNotEmpty) {
+      add(Icons.share_outlined, 'Social / notes', l.notes);
+    }
+    add(Icons.travel_explore, 'Source', l.source);
+
+    if (rows.isEmpty) {
+      return Text(
+        'No contact details on record for this lead yet. Try the website or a '
+        'quick search to enrich it.',
+        style: TextStyle(color: Ak.textLo, fontSize: 12, height: 1.4),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: Ak.bento(radius: 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows),
     );
   }
 

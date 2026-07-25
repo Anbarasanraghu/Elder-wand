@@ -15,6 +15,8 @@ class Lead {
   final String stage;
   final num value;
   final String notes;
+  final String address;
+  final String category;
 
   Lead({
     required this.id,
@@ -27,6 +29,8 @@ class Lead {
     this.stage = 'new',
     this.value = 0,
     this.notes = '',
+    this.address = '',
+    this.category = '',
   });
 
   factory Lead.fromMap(Map<String, dynamic> m) => Lead(
@@ -40,6 +44,8 @@ class Lead {
         stage: '${m['stage'] ?? 'new'}',
         value: (m['value'] as num?) ?? 0,
         notes: '${m['notes'] ?? ''}',
+        address: '${m['address'] ?? ''}',
+        category: '${m['category'] ?? ''}',
       );
 }
 

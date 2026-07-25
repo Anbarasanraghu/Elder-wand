@@ -75,6 +75,37 @@ async function overpass(
   return [];
 }
 
+async function reverseGeocode(lat: number, lon: number): Promise<string> {
+  try {
+    const r = await fetchWithTimeout(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`,
+      8000,
+      { headers: { "User-Agent": "ElderWand-LeadAgent/1.0" } },
+    );
+    const j = await r.json();
+    return j.display_name ?? "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function addrFromTags(t: Record<string, string>): string {
+  return [
+    t["addr:housenumber"],
+    t["addr:street"],
+    t["addr:suburb"] ?? t["addr:neighbourhood"],
+    t["addr:city"],
+    t["addr:postcode"],
+  ].filter(Boolean).join(", ");
+}
+
+function categoryOf(t: Record<string, string>): string {
+  for (const k of ["amenity", "shop", "office", "craft", "leisure", "healthcare"]) {
+    if (t[k]) return t[k].replace(/_/g, " ");
+  }
+  return "";
+}
+
 async function enrich(url: string) {
   let u = url;
   if (!u.startsWith("http")) u = "http://" + u;
@@ -152,13 +183,25 @@ Deno.serve(async (req) => {
         email = e.email;
         socials = e.socials;
       }
+
+      // location + address (reverse-geocode when the POI has no address tags)
+      const lat = el.lat ?? el.center?.lat;
+      const lon = el.lon ?? el.center?.lon;
+      let address = addrFromTags(t);
+      if (!address && lat && lon) {
+        address = await reverseGeocode(lat, lon);
+        await new Promise((x) => setTimeout(x, 1100)); // Nominatim: 1 req/sec
+      }
+      const category = categoryOf(t);
+
       const emailOk = email ? EMAIL.test(email) : false;
       const phoneOk = phone.replace(/\D/g, "").length >= 8;
       if (emailOk) validated++;
       await log(
         `${emailOk || phoneOk ? "✓" : "•"} ${name}` +
-          `${email ? " · " + email : ""}${phone ? " · " + phone : ""}` +
-          `${email && !emailOk ? " (email unverified)" : ""}`,
+          `${category ? " (" + category + ")" : ""}` +
+          `${phone ? " · " + phone : ""}${email ? " · " + email : ""}` +
+          `${address ? " · " + address.split(",").slice(0, 2).join(",") : ""}`,
         emailOk || phoneOk ? "ok" : "dim",
       );
       const notes = Object.entries(socials).map(([k, v]) => `${k}: ${v}`).join(
@@ -170,6 +213,10 @@ Deno.serve(async (req) => {
         phone,
         email,
         website,
+        address,
+        category,
+        lat,
+        lon,
         source: `LeadAgent · ${search} · ${area}`,
         stage: "new",
         notes,
