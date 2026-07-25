@@ -8,6 +8,7 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'api_registry.dart';
 import 'memory_store.dart';
 import 'message_agent.dart';
+import 'crm/crm_config.dart';
 import 'overlay_app.dart';
 import 'theme.dart';
 import 'widgets/assistant_orb.dart';
@@ -32,6 +33,7 @@ void main() async {
   try {
     await AndroidAlarmManager.initialize(); // exact background alarms for the agent
   } catch (_) {}
+  await CrmConfig.init(); // connect the cloud CRM if it's been set up
   // Register the on-device LLM engine (LiteRT-LM) for the Gemma brain.
   try {
     await GemmaService.initEngine();

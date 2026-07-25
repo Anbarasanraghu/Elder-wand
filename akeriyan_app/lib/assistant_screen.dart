@@ -47,6 +47,7 @@ import 'proactive_service.dart';
 import 'proactive_screen.dart';
 import 'scan_screen.dart';
 import 'message_agent_screen.dart';
+import 'crm/crm_cloud_screen.dart';
 import 'overlay_assistant.dart';
 import 'overlay_screen.dart';
 import 'personal_store.dart';
@@ -1439,7 +1440,7 @@ class _AssistantScreenState extends State<AssistantScreen>
       ('Alerts', 'Price & RSI', Icons.notifications_active_outlined,
           AlertsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
       ('CRM', 'Leads & pipeline', Icons.business_center,
-          CrmScreen(backendUrl: widget.backendUrl, token: widget.token), false),
+          const CrmCloudScreen(), true),
       ('Projects', 'Tasks & notes', Icons.folder_open,
           ProjectsScreen(backendUrl: widget.backendUrl, token: widget.token), false),
       ('Documents', 'Ask your notes', Icons.menu_book,
