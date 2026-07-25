@@ -8,6 +8,7 @@ import '../phone_caller.dart';
 import 'crm_config.dart';
 import 'crm_service.dart';
 import 'lead_generator_screen.dart';
+import 'outreach_sheet.dart';
 
 const _stageLabels = {
   'new': 'New',
@@ -446,6 +447,27 @@ class _CrmLeadScreenState extends State<CrmLeadScreen> {
           _actions(),
           const SizedBox(height: 14),
           _details(),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                  backgroundColor: Ak.purple,
+                  padding: const EdgeInsets.symmetric(vertical: 13)),
+              onPressed: () async {
+                await showModalBottomSheet(
+                  context: context,
+                  backgroundColor: Ak.bg1,
+                  isScrollControlled: true,
+                  builder: (_) => OutreachSheet(lead: l),
+                );
+                _load();
+              },
+              icon: const Icon(Icons.campaign_outlined, color: Ak.bg0),
+              label: const Text('Send outreach',
+                  style: TextStyle(color: Ak.bg0, fontWeight: FontWeight.w800)),
+            ),
+          ),
           const SizedBox(height: 14),
           _stageRow(),
           const SizedBox(height: 18),
