@@ -49,15 +49,21 @@ class _CrmCloudScreenState extends State<CrmCloudScreen> {
     setState(() => _loading = true);
     try {
       final leads = await CrmService.leads(stage: _stage);
-      final counts = await CrmService.stageCounts();
-      setState(() {
-        _leads = leads;
-        _counts = counts;
-      });
-    } catch (e) {
+      // Show the leads immediately — the chip counts are secondary and must
+      // never be able to blank the list if they fail.
+      if (mounted) setState(() => _leads = leads);
+      debugPrint('[CRM] applied ${leads.length} leads to the list');
+    } catch (e, st) {
+      debugPrint('[CRM] leads refresh ERROR: $e\n$st');
       _toast('CRM error: $e');
     }
-    setState(() => _loading = false);
+    try {
+      final counts = await CrmService.stageCounts();
+      if (mounted) setState(() => _counts = counts);
+    } catch (e) {
+      debugPrint('[CRM] stageCounts ERROR: $e');
+    }
+    if (mounted) setState(() => _loading = false);
   }
 
   void _toast(String m) {

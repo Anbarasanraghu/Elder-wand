@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -38,6 +39,7 @@ class CrmConfig {
       // ignore: deprecated_member_use — "anon key" is what the dashboard shows
       await Supabase.initialize(url: url, anonKey: key);
       _inited = true;
+      debugPrint('[CRM] connected to project: $url  (key ...${key.length > 6 ? key.substring(key.length - 6) : key})');
       return true;
     } catch (_) {
       return false;

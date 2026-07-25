@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'crm_config.dart';
 
 /// CRM data access against Supabase (Postgres). The app talks to the database
@@ -49,12 +51,18 @@ class CrmService {
   static dynamic get _db => CrmConfig.client;
 
   static Future<List<Lead>> leads({String? stage}) async {
-    var q = _db.from('leads').select();
-    if (stage != null) q = q.eq('stage', stage);
-    final rows = await q.order('updated_at', ascending: false);
-    return (rows as List)
-        .map((e) => Lead.fromMap(e as Map<String, dynamic>))
-        .toList();
+    try {
+      var q = _db.from('leads').select();
+      if (stage != null) q = q.eq('stage', stage);
+      final rows = await q.order('updated_at', ascending: false);
+      debugPrint('[CRM] leads(stage=$stage) -> ${(rows as List).length} rows');
+      return rows
+          .map((e) => Lead.fromMap(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('[CRM] leads(stage=$stage) ERROR: $e');
+      rethrow;
+    }
   }
 
   static Future<Map<String, int>> stageCounts() async {
