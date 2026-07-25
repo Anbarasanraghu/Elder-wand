@@ -7,6 +7,7 @@ import '../sms_sender.dart';
 import '../phone_caller.dart';
 import 'crm_config.dart';
 import 'crm_service.dart';
+import 'lead_generator_screen.dart';
 
 const _stageLabels = {
   'new': 'New',
@@ -82,6 +83,16 @@ class _CrmCloudScreenState extends State<CrmCloudScreen> {
         title: const Text('CRM',
             style: TextStyle(fontFamily: Ak.dot, letterSpacing: 2)),
         actions: [
+          if (_ready)
+            IconButton(
+              icon: const Icon(Icons.bolt, color: Ak.purple),
+              tooltip: 'Generate leads',
+              onPressed: () async {
+                await Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const LeadGeneratorScreen()));
+                _refresh();
+              },
+            ),
           if (_ready)
             IconButton(
               icon: const Icon(Icons.refresh, color: Ak.silver),
