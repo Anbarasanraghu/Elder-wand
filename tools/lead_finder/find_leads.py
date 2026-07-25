@@ -140,6 +140,7 @@ def main():
 
     seen = existing_keys(url, headers)
     new_rows = []
+    skipped = 0
     for el in elements:
         if len(new_rows) >= limit:
             break
@@ -153,6 +154,7 @@ def main():
 
         key_id = f"{name.lower()}|{phone}"
         if key_id in seen:
+            skipped += 1
             continue
         seen.add(key_id)
 
@@ -175,7 +177,9 @@ def main():
             "notes": notes,
         })
 
-    print(f"{len(new_rows)} new leads to add.")
+    print(f"{len(new_rows)} NEW leads to add "
+          f"({skipped} already in your CRM — skipped as duplicates). "
+          f"Tip: run a different search/area to find more.")
     if new_rows:
         r = requests.post(f"{url}/rest/v1/leads", headers=headers,
                           data=json.dumps(new_rows), timeout=60)
