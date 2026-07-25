@@ -10,6 +10,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const MIRRORS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "https://overpass.openstreetmap.fr/api/interpreter",
 ];
 const EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const SOCIALS: Record<string, RegExp> = {
@@ -32,29 +34,43 @@ async function fetchWithTimeout(url: string, ms: number, init?: RequestInit) {
   }
 }
 
-async function overpass(search: string, area: string, cap: number) {
+async function overpass(
+  search: string,
+  area: string,
+  cap: number,
+  log: (m: string, l?: string) => Promise<unknown>,
+) {
   const s = search.replace(/"/g, "");
   const a = area.replace(/"/g, "");
-  const q = `[out:json][timeout:60];area["name"="${a}"]->.a;(` +
+  const q = `[out:json][timeout:50];area["name"="${a}"]->.a;(` +
     `nwr(area.a)[amenity~"${s}",i];nwr(area.a)[shop~"${s}",i];` +
     `nwr(area.a)[office~"${s}",i];nwr(area.a)[craft~"${s}",i];` +
     `nwr(area.a)[leisure~"${s}",i];nwr(area.a)[healthcare~"${s}",i];` +
     `nwr(area.a)[name~"${s}",i];);out center ${cap};`;
-  for (let i = 0; i < 4; i++) {
+  const sleep = (ms: number) => new Promise((x) => setTimeout(x, ms));
+  // Public Overpass mirrors are flaky (429/504) — rotate + retry so a busy
+  // server doesn't make a run come back empty.
+  for (let i = 0; i < 8; i++) {
+    const ep = MIRRORS[i % MIRRORS.length];
     try {
-      const r = await fetchWithTimeout(MIRRORS[i % MIRRORS.length], 90000, {
+      const r = await fetchWithTimeout(ep, 45000, {
         method: "POST",
         body: new URLSearchParams({ data: q }),
       });
-      if (r.status === 429) {
-        await new Promise((x) => setTimeout(x, 4000));
+      if (r.status === 429 || r.status >= 500) {
+        await log(`Server busy (${r.status}), trying another mirror…`, "dim");
+        await sleep(2500 + i * 800);
         continue;
       }
       const j = await r.json();
       const els = j.elements ?? [];
       if (els.length) return els;
-    } catch (_) { /* try next mirror */ }
-    await new Promise((x) => setTimeout(x, 2000));
+      await log("A mirror returned nothing, trying another…", "dim");
+      await sleep(1500);
+    } catch (_) {
+      await log("Mirror timed out, trying another…", "dim");
+      await sleep(1500);
+    }
   }
   return [];
 }
@@ -93,8 +109,16 @@ Deno.serve(async (req) => {
   try {
     await sb.from("scrape_runs").update({ status: "running" }).eq("id", run_id);
     await log(`Searching OpenStreetMap for "${search}" in "${area}"…`);
-    const els = await overpass(search, area, target * 4);
-    await log(`Found ${els.length} candidates.`, "ok");
+    const els = await overpass(search, area, target * 4, log);
+    await log(`Found ${els.length} candidates.`, els.length ? "ok" : "warn");
+    if (!els.length) {
+      await log(
+        "No results — the map servers may be busy (try again), or this niche "
+          + "has little OpenStreetMap data. Physical businesses (dentist, gym, "
+          + "cafe, salon, hotel, clinic) work best.",
+        "warn",
+      );
+    }
 
     const { data: existing } = await sb.from("leads").select("name,phone");
     const seen = new Set(
