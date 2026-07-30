@@ -48,6 +48,7 @@ import 'proactive_screen.dart';
 import 'scan_screen.dart';
 import 'message_agent_screen.dart';
 import 'crm/crm_cloud_screen.dart';
+import 'scalp/scalp_terminal_screen.dart';
 import 'overlay_assistant.dart';
 import 'overlay_screen.dart';
 import 'personal_store.dart';
@@ -1418,6 +1419,8 @@ class _AssistantScreenState extends State<AssistantScreen>
           VisionScreen(backendUrl: widget.backendUrl, token: widget.token), true),
       ('Markets', 'Charts & trades', Icons.candlestick_chart,
           TradingScreen(backendUrl: widget.backendUrl, token: widget.token), false),
+      ('Scalp Terminal', '1m/5m live + signals', Icons.show_chart,
+          const ScalpTerminalScreen(), true),
       ('On-device AI', 'Your phone brain', Icons.memory,
           const GemmaTestScreen(), true),
       ('APIs', 'What I can access', Icons.hub_outlined,
