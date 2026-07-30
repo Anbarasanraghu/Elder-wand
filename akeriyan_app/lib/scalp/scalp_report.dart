@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import 'liquidity.dart';
 import 'scalp_sentiment.dart';
 import 'scalp_signal.dart';
+import 'structure.dart';
 
 /// Generates a designed PDF scalping report and opens the share sheet.
 class ScalpReport {
@@ -25,6 +26,7 @@ class ScalpReport {
     required Signal s,
     required Sentiment sent,
     required Liquidity liq,
+    MarketStructure? ms,
     required DateTime at,
   }) async {
     final verdictColor =
@@ -112,6 +114,27 @@ class ScalpReport {
               _stat('ATR (14)', _f(s.atr)),
               _stat('BB mid', _f(s.bb.mid)),
             ]),
+            if (ms != null) ...[
+              pw.SizedBox(height: 18),
+              _h('Market Structure'),
+              pw.SizedBox(height: 8),
+              pw.Wrap(spacing: 10, runSpacing: 10, children: [
+                _stat('Bias', ms.bias),
+                _stat('Trend strength', '${ms.trendStrength}%'),
+                _stat('Session', ms.session),
+                if (ms.bos != null) _stat('Structure', ms.bos!),
+                if (ms.resistance.isNotEmpty)
+                  _stat('Resistance', ms.resistance.map(_f).join('  ')),
+                if (ms.support.isNotEmpty)
+                  _stat('Support', ms.support.map(_f).join('  ')),
+                if (ms.orderBlock != null)
+                  _stat('Order block',
+                      '${_f(ms.orderBlock!.low)}–${_f(ms.orderBlock!.high)}'),
+                if (ms.fvg != null)
+                  _stat('Fair value gap',
+                      '${_f(ms.fvg!.low)}–${_f(ms.fvg!.high)}'),
+              ]),
+            ],
             pw.SizedBox(height: 18),
             _h('Why this signal'),
             pw.SizedBox(height: 6),

@@ -9,6 +9,7 @@ import 'scalp_data.dart';
 import 'scalp_report.dart';
 import 'scalp_sentiment.dart';
 import 'scalp_signal.dart';
+import 'structure.dart';
 
 /// Live 1m/5m scalping terminal — chart + per-minute signal + News Radar + PDF.
 /// Data: Twelve Data free API (~1-3s, polled to respect the free tier).
@@ -26,6 +27,7 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
   Signal? _sig;
   Sentiment? _sent;
   Liquidity? _liq;
+  MarketStructure? _ms;
   bool _loading = true;
   bool _needKey = false;
   String? _error;
@@ -65,6 +67,7 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
         _candles = c;
         _sig = c.length > 30 ? SignalEngine.compute(c) : null;
         _liq = c.length > 12 ? LiquidityFinder.analyze(c) : null;
+        _ms = c.length > 50 ? StructureFinder.analyze(c) : null;
         _error = null;
         _loading = false;
       });
@@ -96,6 +99,7 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
       _sig = null;
       _sent = null;
       _liq = null;
+      _ms = null;
       _loading = true;
     });
     _poll();
@@ -110,6 +114,7 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
         s: _sig!,
         sent: _sent ?? Sentiment(0, 'Neutral', const []),
         liq: _liq ?? Liquidity(const [], null, null, 'No data.'),
+        ms: _ms,
         at: DateTime.now(),
       );
     } catch (e) {
@@ -156,15 +161,21 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
                           padding: const EdgeInsets.all(8),
                           child: CandleChart(
                               candles: _candles,
-                              levels: _liq?.pools ?? const []),
+                              levels: _liq?.pools ?? const [],
+                              support: _ms?.support ?? const [],
+                              resistance: _ms?.resistance ?? const []),
                         ),
                 ),
                 const SizedBox(height: 12),
                 if (_sig != null) _verdictCard(_sig!),
                 const SizedBox(height: 12),
+                if (_ms != null) _structureCard(_ms!),
+                const SizedBox(height: 12),
                 if (_sig != null) _signalCard(_sig!),
                 const SizedBox(height: 12),
                 if (_sig != null) _indicators(_sig!),
+                const SizedBox(height: 12),
+                if (_ms != null) _levelsCard(_ms!),
                 const SizedBox(height: 12),
                 if (_liq != null) _liquidityCard(_liq!),
                 const SizedBox(height: 12),
@@ -296,6 +307,137 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
       ),
     );
   }
+
+  String _fp(double v) => v.toStringAsFixed(v > 100 ? 2 : 4);
+
+  Widget _structureCard(MarketStructure m) {
+    final biasCol = m.bias == 'Bullish'
+        ? Ak.up
+        : m.bias == 'Bearish'
+            ? Ak.down
+            : Ak.silver;
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: Ak.bento(radius: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.architecture, size: 16, color: Ak.violet),
+            const SizedBox(width: 8),
+            const Text('Market Structure',
+                style: TextStyle(color: Ak.textHi, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                  color: biasCol.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Text(m.bias,
+                  style: TextStyle(color: biasCol, fontWeight: FontWeight.w800, fontSize: 12)),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Trend strength',
+                    style: TextStyle(color: Ak.textLo, fontSize: 11)),
+                const SizedBox(height: 4),
+                LinearProgressIndicator(
+                  value: m.trendStrength / 100,
+                  minHeight: 6,
+                  backgroundColor: Ak.glassFill,
+                  color: biasCol,
+                ),
+                const SizedBox(height: 3),
+                Text('${m.trendStrength}%',
+                    style: const TextStyle(color: Ak.textHi, fontWeight: FontWeight.w700, fontSize: 12)),
+              ]),
+            ),
+            const SizedBox(width: 16),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Row(children: [
+                Icon(Icons.circle,
+                    size: 8, color: m.sessionHot ? Ak.up : Ak.textLo),
+                const SizedBox(width: 6),
+                Text(m.session,
+                    style: const TextStyle(color: Ak.textHi, fontWeight: FontWeight.w600, fontSize: 12)),
+              ]),
+              const SizedBox(height: 4),
+              if (m.bos != null)
+                Text(m.bos!,
+                    style: TextStyle(
+                        color: m.bos!.startsWith('Bull') ? Ak.up : Ak.down,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12)),
+            ]),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _levelsCard(MarketStructure m) {
+    Widget lvlList(String title, List<double> arr, Color color) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: TextStyle(color: Ak.textLo, fontSize: 11)),
+            const SizedBox(height: 4),
+            if (arr.isEmpty)
+              Text('—', style: TextStyle(color: Ak.textLo))
+            else
+              for (final v in arr)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1),
+                  child: Text(_fp(v),
+                      style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
+          ]),
+        );
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: Ak.bento(radius: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Key Levels & Zones',
+              style: TextStyle(color: Ak.textHi, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            lvlList('Resistance', m.resistance, Ak.down),
+            lvlList('Support', m.support, Ak.up),
+          ]),
+          if (m.orderBlock != null || m.fvg != null) ...[
+            const Divider(color: Ak.glassLine, height: 22),
+            if (m.orderBlock != null)
+              _zoneRow('Order block',
+                  '${_fp(m.orderBlock!.low)} – ${_fp(m.orderBlock!.high)}',
+                  m.orderBlock!.bull),
+            if (m.fvg != null)
+              _zoneRow('Fair value gap',
+                  '${_fp(m.fvg!.low)} – ${_fp(m.fvg!.high)}', m.fvg!.bull),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _zoneRow(String label, String range, bool bull) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          Icon(bull ? Icons.arrow_upward : Icons.arrow_downward,
+              size: 14, color: bull ? Ak.up : Ak.down),
+          const SizedBox(width: 8),
+          Text('$label  ',
+              style: TextStyle(color: Ak.textMid, fontSize: 12.5)),
+          const Spacer(),
+          Text(range,
+              style: TextStyle(
+                  color: bull ? Ak.up : Ak.down,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5)),
+        ]),
+      );
 
   Widget _liquidityCard(Liquidity q) {
     return Container(

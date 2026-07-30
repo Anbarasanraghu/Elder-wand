@@ -9,12 +9,20 @@ import 'scalp_data.dart';
 class CandleChart extends StatelessWidget {
   final List<Candle> candles;
   final List<LiqLevel> levels;
-  const CandleChart({super.key, required this.candles, this.levels = const []});
+  final List<double> support;
+  final List<double> resistance;
+  const CandleChart({
+    super.key,
+    required this.candles,
+    this.levels = const [],
+    this.support = const [],
+    this.resistance = const [],
+  });
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _CandlePainter(candles, levels),
+      painter: _CandlePainter(candles, levels, support, resistance),
       size: Size.infinite,
     );
   }
@@ -23,7 +31,8 @@ class CandleChart extends StatelessWidget {
 class _CandlePainter extends CustomPainter {
   final List<Candle> c;
   final List<LiqLevel> levels;
-  _CandlePainter(this.c, this.levels);
+  final List<double> support, resistance;
+  _CandlePainter(this.c, this.levels, this.support, this.resistance);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -92,6 +101,18 @@ class _CandlePainter extends CustomPainter {
 
     ema(9, Ak.purple);
     ema(21, Ak.violet.withValues(alpha: 0.8));
+
+    // support / resistance (solid faint)
+    void sr(List<double> arr, Color color) {
+      for (final v in arr) {
+        if (v < lo || v > hi) continue;
+        canvas.drawLine(Offset(0, y(v)), Offset(size.width, y(v)),
+            Paint()..color = color.withValues(alpha: 0.35)..strokeWidth = 0.8);
+      }
+    }
+
+    sr(support, Ak.up);
+    sr(resistance, Ak.down);
 
     // liquidity levels (dashed): buy-side above = red, sell-side below = green
     for (final lv in levels) {
