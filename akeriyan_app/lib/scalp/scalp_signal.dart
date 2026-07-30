@@ -10,6 +10,8 @@ class Signal {
   final double? entry, sl, tp;
   final double rsi, macdHist, ema9, ema21, atr;
   final ({double up, double mid, double low}) bb;
+  final String verdict; // TAKE | CAUTION | AVOID
+  final String guidance; // full plain-language description
 
   Signal({
     required this.side,
@@ -25,6 +27,8 @@ class Signal {
     required this.ema21,
     required this.atr,
     required this.bb,
+    required this.verdict,
+    required this.guidance,
   });
 }
 
@@ -107,7 +111,53 @@ class SignalEngine {
       }
     }
 
+    // ---- verdict: TAKE / CAUTION / AVOID + full guidance ----
+    String f(double? v) => v == null ? '—' : v.toStringAsFixed(v > 100 ? 2 : 4);
+    final extreme = side == 'LONG' ? rsi >= 72 : rsi <= 28;
+    final thinVol = atr < price * 0.0004; // very low ATR ⇒ chop
+    String verdict, guidance;
+    if (side == 'WAIT') {
+      verdict = 'AVOID';
+      guidance =
+          'No clean edge right now — the indicators disagree (EMA, MACD, RSI and '
+          'momentum are mixed), which is typical of chop where scalps get chewed '
+          'up. Standing aside IS a position. Wait until EMA9/EMA21 align with the '
+          'MACD histogram and RSI is trending (not flat) before committing.';
+    } else if (extreme) {
+      verdict = 'CAUTION';
+      guidance =
+          '$side bias, but RSI is ${side == 'LONG' ? 'overbought' : 'oversold'} '
+          'at ${rsi.toStringAsFixed(0)} — entering now risks '
+          '${side == 'LONG' ? 'buying the top' : 'selling the bottom'} right into '
+          'a snap-back. Better: wait for a pullback to EMA9/EMA21, or a confirmed '
+          'continuation (break of the last swing) before taking it.';
+    } else if (thinVol) {
+      verdict = 'CAUTION';
+      guidance =
+          '$side bias, but volatility (ATR ${f(atr)}) is very low — likely a '
+          'consolidation/range where price whipsaws and stops get tapped by '
+          'noise. Wait for a volatility expansion or a clean break of the range '
+          'before scalping.';
+    } else if (conf >= 70) {
+      verdict = 'TAKE';
+      guidance =
+          'Clean $side setup with $conf% confidence: trend, momentum and '
+          'RSI all agree. Plan — enter near ${f(entry)}, stop ${f(sl)}, target '
+          '${f(tp)} (about 1.5R). Risk only 1–2% of your account, and move the '
+          'stop to break-even once price reaches +1R. Skip it if high-impact news '
+          'is due within a few minutes.';
+    } else {
+      verdict = 'CAUTION';
+      guidance =
+          '$side bias with moderate $conf% confidence — the confluence is '
+          'only partial. Either wait for one more confirmation (MACD flip, a break '
+          'of structure, or an RSI push through 50), or take it at reduced size '
+          'with a tight stop at ${f(sl)}.';
+    }
+
     return Signal(
+      verdict: verdict,
+      guidance: guidance,
       side: side,
       confidence: conf,
       reasons: reasons,

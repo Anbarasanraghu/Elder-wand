@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import 'liquidity.dart';
 import 'scalp_data.dart';
 
-/// Lightweight candlestick chart with EMA9/EMA21 overlays — CustomPainter,
-/// no chart dependency.
+/// Lightweight candlestick chart with EMA9/EMA21 overlays + liquidity levels —
+/// CustomPainter, no chart dependency.
 class CandleChart extends StatelessWidget {
   final List<Candle> candles;
-  const CandleChart({super.key, required this.candles});
+  final List<LiqLevel> levels;
+  const CandleChart({super.key, required this.candles, this.levels = const []});
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _CandlePainter(candles),
+      painter: _CandlePainter(candles, levels),
       size: Size.infinite,
     );
   }
@@ -20,7 +22,8 @@ class CandleChart extends StatelessWidget {
 
 class _CandlePainter extends CustomPainter {
   final List<Candle> c;
-  _CandlePainter(this.c);
+  final List<LiqLevel> levels;
+  _CandlePainter(this.c, this.levels);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -89,6 +92,24 @@ class _CandlePainter extends CustomPainter {
 
     ema(9, Ak.purple);
     ema(21, Ak.violet.withValues(alpha: 0.8));
+
+    // liquidity levels (dashed): buy-side above = red, sell-side below = green
+    for (final lv in levels) {
+      if (lv.price < lo || lv.price > hi) continue;
+      final ly = y(lv.price);
+      final col = (lv.buySide ? Ak.down : Ak.up).withValues(alpha: 0.55);
+      final p = Paint()..color = col..strokeWidth = 1;
+      for (double dx = 0; dx < size.width - 4; dx += 8) {
+        canvas.drawLine(Offset(dx, ly), Offset(dx + 4, ly), p);
+      }
+      final tp = TextPainter(
+        text: TextSpan(
+            text: '${lv.buySide ? 'BSL' : 'SSL'} ×${lv.touches}',
+            style: TextStyle(color: col, fontSize: 8, fontWeight: FontWeight.w700)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(2, ly - 10));
+    }
 
     // last price line + label
     final last = data.last.c;

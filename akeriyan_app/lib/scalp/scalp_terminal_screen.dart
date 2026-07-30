@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 import 'candle_chart.dart';
+import 'liquidity.dart';
 import 'scalp_data.dart';
 import 'scalp_report.dart';
 import 'scalp_sentiment.dart';
@@ -24,6 +25,7 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
   List<Candle> _candles = [];
   Signal? _sig;
   Sentiment? _sent;
+  Liquidity? _liq;
   bool _loading = true;
   bool _needKey = false;
   String? _error;
@@ -62,6 +64,7 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
       setState(() {
         _candles = c;
         _sig = c.length > 30 ? SignalEngine.compute(c) : null;
+        _liq = c.length > 12 ? LiquidityFinder.analyze(c) : null;
         _error = null;
         _loading = false;
       });
@@ -92,9 +95,29 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
       _candles = [];
       _sig = null;
       _sent = null;
+      _liq = null;
       _loading = true;
     });
     _poll();
+  }
+
+  Future<void> _sharePdf() async {
+    if (_sig == null) return;
+    try {
+      await ScalpReport.share(
+        symbol: _symbol,
+        interval: _tf,
+        s: _sig!,
+        sent: _sent ?? Sentiment(0, 'Neutral', const []),
+        liq: _liq ?? Liquidity(const [], null, null, 'No data.'),
+        at: DateTime.now(),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('PDF failed: $e')));
+      }
+    }
   }
 
   @override
@@ -111,15 +134,7 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined, color: Ak.purple),
             tooltip: 'PDF report',
-            onPressed: (_sig == null || _sent == null)
-                ? null
-                : () => ScalpReport.share(
-                      symbol: _symbol,
-                      interval: _tf,
-                      s: _sig!,
-                      sent: _sent!,
-                      at: DateTime.now(),
-                    ),
+            onPressed: _sig == null ? null : _sharePdf,
           ),
         ],
       ),
@@ -139,13 +154,19 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
                       : Container(
                           decoration: Ak.bento(radius: 14),
                           padding: const EdgeInsets.all(8),
-                          child: CandleChart(candles: _candles),
+                          child: CandleChart(
+                              candles: _candles,
+                              levels: _liq?.pools ?? const []),
                         ),
                 ),
+                const SizedBox(height: 12),
+                if (_sig != null) _verdictCard(_sig!),
                 const SizedBox(height: 12),
                 if (_sig != null) _signalCard(_sig!),
                 const SizedBox(height: 12),
                 if (_sig != null) _indicators(_sig!),
+                const SizedBox(height: 12),
+                if (_liq != null) _liquidityCard(_liq!),
                 const SizedBox(height: 12),
                 _newsRadar(),
                 const SizedBox(height: 10),
@@ -233,6 +254,100 @@ class _ScalpTerminalScreenState extends State<ScalpTerminalScreen> {
       ),
     );
   }
+
+  Widget _verdictCard(Signal s) {
+    const amber = Color(0xFFE0A83B);
+    final col = s.verdict == 'TAKE'
+        ? Ak.up
+        : s.verdict == 'AVOID'
+            ? Ak.down
+            : amber;
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(colors: [
+          col.withValues(alpha: 0.22),
+          col.withValues(alpha: 0.06),
+        ]),
+        border: Border.all(color: col.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(s.verdict,
+                  style: TextStyle(
+                      color: col, fontSize: 22, fontWeight: FontWeight.w900)),
+              const SizedBox(width: 10),
+              Text('the trade',
+                  style: TextStyle(color: Ak.textMid, fontSize: 13)),
+              const Spacer(),
+              Text('${s.side} · ${s.confidence}%',
+                  style: TextStyle(
+                      color: Ak.textHi, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(s.guidance,
+              style: const TextStyle(color: Ak.textHi, fontSize: 13, height: 1.45)),
+        ],
+      ),
+    );
+  }
+
+  Widget _liquidityCard(Liquidity q) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: Ak.bento(radius: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.water_drop_outlined, size: 16, color: Ak.violet),
+            const SizedBox(width: 8),
+            const Text('Liquidity — likely hunt',
+                style: TextStyle(color: Ak.textHi, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _liqPill('Buy-side above (BSL)', q.nearestAbove, Ak.down),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _liqPill('Sell-side below (SSL)', q.nearestBelow, Ak.up),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(q.hunt,
+              style: const TextStyle(color: Ak.textMid, fontSize: 12.5, height: 1.4)),
+        ],
+      ),
+    );
+  }
+
+  Widget _liqPill(String label, double? v, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(color: Ak.textLo, fontSize: 10)),
+            const SizedBox(height: 2),
+            Text(v == null ? '—' : v.toStringAsFixed(v > 100 ? 2 : 4),
+                style: TextStyle(
+                    color: color, fontSize: 15, fontWeight: FontWeight.w800)),
+          ],
+        ),
+      );
 
   Widget _signalCard(Signal s) {
     final col = s.side == 'LONG'
